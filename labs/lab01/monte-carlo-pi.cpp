@@ -5,11 +5,12 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
+#include <mutex>
 
 using namespace std;
 using namespace std::chrono;
 
-void monte_carlo_pi(size_t iterations)
+void monte_carlo_pi(size_t iterations, std::vector<int>* results, std::mutex* lck)
 {
     // Seed with real random number if available
     random_device r;
@@ -34,6 +35,9 @@ void monte_carlo_pi(size_t iterations)
     }
     // Calculate pi
     auto pi = (4.0 * in_circle) / static_cast<double>(iterations);
+    lck->lock();
+    results->push_back(in_circle);
+    lck->unlock();
 }
 
 int main(int argc, char **argv)
@@ -41,6 +45,8 @@ int main(int argc, char **argv)
     // Create data file
     ofstream data("montecarlo.csv", ofstream::out);
     data << "Number of threads,Time (ms)" << endl;
+    std::mutex guard;
+    std::vector<int> results;
     for (size_t num_threads_power_of_two = 0; num_threads_power_of_two <= 10; ++num_threads_power_of_two)
     {
         auto total_threads = 1 << num_threads_power_of_two; // 2 ^ num_threads_power_of_two
@@ -60,7 +66,7 @@ int main(int argc, char **argv)
             threads.reserve(total_threads);
             for (size_t n = 0; n < total_threads; ++n)
                 // Working in base 2 to make things a bit easier
-                threads.push_back(thread(monte_carlo_pi, 1 << (24 - num_threads_power_of_two) ));
+                threads.push_back(thread(monte_carlo_pi, 1 << (24 - num_threads_power_of_two) , &results, &guard));
             // Join the threads (wait for them to finish)
             for (auto &t : threads)
                 t.join();
@@ -71,9 +77,22 @@ int main(int argc, char **argv)
             // Convert to milliseconds and save
             total_ms += duration_cast<milliseconds>(total).count();
         }
-        // output to file
-        data << "," << total_ms / MAX_ITERS << endl;
+        data << "," << total_ms / MAX_ITERS << ", results = " << results[num_threads_power_of_two] << endl;
     }
+    mutex guard2;
+    int total{0};
+    vector<thread> threads;
+    threads.reserve(4);
+    // output to file
+    for (int i = 0; i < 4; ++i)
+    {
+        threads.push_back(thread([&guard2, &total, &results, i] { guard2.lock();
+        total += results[i];
+        guard2.unlock(); }));
+    }
+    for (auto& t : threads)
+        t.join();
+    data << "Total in circle = " << total << endl;
     // Close the file
     data.close();
     return 0;
