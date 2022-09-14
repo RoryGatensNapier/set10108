@@ -12,10 +12,11 @@
 #endif
 
 #ifndef WORKLOAD
-#define WORKLOAD 10000000
+#define WORKLOAD 123456789
 #endif
 
 using namespace std;
+using namespace std::chrono;
 
 //	Function to initialise the results vector for latter workers to solve
 vector<float> initialise()
@@ -31,14 +32,24 @@ vector<float> initialise()
 	//	Seed with real random number if available
 	uniform_real_distribution<float> distribution(1, WORKLOAD);
 
+	int remainder{ 0 };
+	if (WORKLOAD % THREADS != 0)
+	{
+		remainder = WORKLOAD % THREADS;
+	}
+	int chunkSize{ WORKLOAD / THREADS };	//	Getting the chunk size to divide to workers TODO: ensure that unevenly distributed results are accounted for
+
 	// Initiating the work threads with a lambda function that assigns random values to initial results vector
 	for (int i = 0; i < THREADS; ++i)
 	{
-		int chunkSize{ WORKLOAD / THREADS };	//	Getting the chunk size to divide to workers TODO: ensure that unevenly distributed results are accounted for
 		threads.push_back(
-			thread([i, chunkSize, &e, &distribution, &randomValues] { 
+			thread([i, chunkSize, remainder, &e, &distribution, &randomValues] { 
 			auto initialVal = chunkSize * i;
 			auto finalVal = (chunkSize * (i + 1)) - 1;
+			if (i == THREADS - 1 && remainder != 0)
+			{
+				finalVal += remainder;
+			}
 			for (int x = initialVal; x < finalVal; ++x)	//	Perhaps an area to include loop unrolling
 			{
 				randomValues[x] = distribution(e);
@@ -62,6 +73,7 @@ int SortForLowest(vector<float> work)
 	vector<float> lowestValuesFound(THREADS, 0);
 
 	// Initialising workers with lambda solving for lowest value in their given workset
+	auto start = system_clock::now();
 	for (int i = 0; i < 10; ++i)
 	{
 		auto chunkSize{ work.size() / lowestValuesFound.size() };
@@ -105,7 +117,10 @@ int SortForLowest(vector<float> work)
 			lowest = lowestValuesFound[i];
 		}
 	}
-	cout << lowest << endl;	// Print to console
+	auto end = system_clock::now();
+	auto total = end - start;
+	auto total_ms = duration_cast<milliseconds>(total).count();
+	cout << lowest << " found in " << total_ms << "ms" << endl;	// Print to console
 	return lowest;
 }
 
