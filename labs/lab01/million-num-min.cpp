@@ -12,7 +12,7 @@
 #endif
 
 #ifndef WORKLOAD
-#define WORKLOAD 123456789
+#define WORKLOAD 1234567890
 #endif
 
 using namespace std;
@@ -38,7 +38,7 @@ vector<float> initialise()
 		remainder = WORKLOAD % THREADS;
 	}
 	int chunkSize{ WORKLOAD / THREADS };	//	Getting the chunk size to divide to workers TODO: ensure that unevenly distributed results are accounted for
-
+	auto start = system_clock::now();
 	// Initiating the work threads with a lambda function that assigns random values to initial results vector
 	for (int i = 0; i < THREADS; ++i)
 	{
@@ -61,6 +61,11 @@ vector<float> initialise()
 	{
 		t.join();
 	}
+	auto end = system_clock::now();
+	auto total = end - start;
+	auto total_ms = duration_cast<milliseconds>(total).count();
+	cout << "intialised in " << total_ms << "ms" << endl;	// Print to console
+
 	return randomValues;
 }
 
@@ -74,12 +79,21 @@ int SortForLowest(vector<float> work)
 
 	// Initialising workers with lambda solving for lowest value in their given workset
 	auto start = system_clock::now();
-	for (int i = 0; i < 10; ++i)
+	for (int i = 0; i < THREADS; ++i)
 	{
-		auto chunkSize{ work.size() / lowestValuesFound.size() };
-		threads.push_back(thread([i, chunkSize, &work, &lowestValuesFound] {
+		auto chunkSize{ work.size() / THREADS };
+		int remainder{ 0 };
+		if (WORKLOAD % THREADS != 0)
+		{
+			remainder = work.size() % THREADS;
+		}
+		threads.push_back(thread([i, chunkSize, remainder, &work, &lowestValuesFound] {
 			auto initialVal = chunkSize * i;
 			auto finalVal = (chunkSize * (i + 1)) - 1;
+			if (i == THREADS - 1 && remainder != 0)
+			{
+				finalVal += remainder;
+			}
 			for (int x = initialVal; x < finalVal; ++x)
 			{
 				if (lowestValuesFound.size() == 0)
