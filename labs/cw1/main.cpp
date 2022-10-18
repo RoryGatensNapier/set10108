@@ -9,6 +9,8 @@
 #include <ctime>
 #include <cstdlib>
 #include <filesystem>
+#include <omp.h>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -77,6 +79,7 @@ const float getImageHSV(const sf::Texture tex)
             }
         }
         auto avg = acc / px_count;
+        img.~Image();
         return avg;
     }
 }
@@ -86,10 +89,24 @@ int main()
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
     // example folder to load images
-    constexpr char* image_folder = "D:/CPS_CW1_IMG/image_fever_example/unsorted";
+    constexpr char* image_folder = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/unsorted";
     std::vector<std::string> imageFilenames;
+    int fileCount{ 0 };
     for (auto& p : fs::directory_iterator(image_folder))
+    {
         imageFilenames.push_back(p.path().u8string());
+        ++fileCount;
+    }
+
+    std::vector<std::pair<sf::Texture, float>> texs(fileCount);
+    //auto threadCount = std::thread::hardware_concurrency();
+#pragma parallel for num_threads(std::thread::hardware_concurreny()) schedule(dynamic) // #TODO: test performance here
+    for (int i = 0; i < fileCount; i++)
+    {
+        if (!texs[i].first.loadFromFile(imageFilenames[i]))
+            return EXIT_FAILURE;
+        texs[i].second = getImageHSV(texs[i].first);
+    }
 
     // Define some constants
     const float pi = 3.14159f;
@@ -110,8 +127,6 @@ int main()
     sf::Sprite sprite (texture);
     // Make sure the texture fits the screen
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
-    texture.loadFromFile(imageFilenames[12]);
-    getImageHSV(texture);
 
     sf::Clock clock;
     while (window.isOpen())
