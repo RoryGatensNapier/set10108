@@ -4,6 +4,7 @@
 // Headers
 ////////////////////////////////////////////////////////////
 #include <SFML/Graphics.hpp>
+#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <cstdlib>
@@ -19,12 +20,73 @@ sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidt
     return { scale, scale };
 }
 
+const float getImageHSV(const sf::Texture tex)
+{
+    float h = 0, s = 0, v = 0, acc = 0, px_count = 0;
+    auto size = tex.getSize();
+    px_count = size.x * size.y;
+    auto img = tex.copyToImage();
+
+    if (img.getPixelsPtr())
+    {
+        for (int y = 0; y < size.y; y++)
+        {
+            for (int x = 0; x < size.x; x++)
+            {
+                auto col = img.getPixel(x, y);
+                auto r_derived = col.r / 255.0f;
+                auto g_derived = col.g / 255.0f;
+                auto b_derived = col.b / 255.0f;
+                auto cmax = std::max(std::max(r_derived, g_derived), b_derived);
+                auto cmin = std::min(std::min(r_derived, g_derived), b_derived);
+                auto delta = cmax - cmin;
+
+                v = cmax;
+
+                if (cmax != 0)
+                {
+                    s = cmax / delta;
+                }
+                else
+                {
+                    s = 0;
+                }
+
+                if (delta != 0)
+                {
+                    if (cmax == r_derived)
+                    {
+                        h = ((g_derived - b_derived) / delta);
+                    }
+                    else if (cmax = g_derived)
+                    {
+                        h = ((b_derived - r_derived) / delta + 2);
+                    }
+                    else
+                    {
+                        h = ((r_derived - g_derived) / delta + 4);
+                    }
+                    h *= 60;
+                }
+                else
+                {
+                    h = 0;
+                }
+
+                acc += h;
+            }
+        }
+        auto avg = acc / px_count;
+        return avg;
+    }
+}
+
 int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
     // example folder to load images
-    constexpr char* image_folder = "C:/Users/Babis/Desktop/par_images/unsorted";
+    constexpr char* image_folder = "D:/CPS_CW1_IMG/image_fever_example/unsorted";
     std::vector<std::string> imageFilenames;
     for (auto& p : fs::directory_iterator(image_folder))
         imageFilenames.push_back(p.path().u8string());
@@ -48,6 +110,8 @@ int main()
     sf::Sprite sprite (texture);
     // Make sure the texture fits the screen
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
+    texture.loadFromFile(imageFilenames[12]);
+    getImageHSV(texture);
 
     sf::Clock clock;
     while (window.isOpen())

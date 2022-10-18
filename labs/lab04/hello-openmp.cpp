@@ -13,6 +13,7 @@ void hello()
     // Get the number of threads in operation
     auto thread_count = omp_get_num_threads();
     // Display a message
+#pragma omp critical  //enable to ensure cout is correctly constructed (shorthand mutex, more or less)
     cout << "Hello from thread " << my_rank << " of " << thread_count << endl;
 }
 

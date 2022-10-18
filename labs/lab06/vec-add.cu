@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 	cudaFree(buffer_C);
 
 	// Test that the results are correct
-	for (int i = 0; i < 2048; ++i)
+	for (int i = 0; i < ELEMENTS; ++i)
 		if (C[i] != i + i)
 			cout << "Error: " << i << endl;
 
