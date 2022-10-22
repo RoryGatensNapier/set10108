@@ -60,13 +60,13 @@ const float getImageHSV(const sf::Texture tex)
                     {
                         h = ((g_derived - b_derived) / delta);
                     }
-                    else if (cmax = g_derived)
+                    else if (cmax == g_derived)
                     {
-                        h = ((b_derived - r_derived) / delta + 2);
+                        h = (((b_derived - r_derived) / delta) + 2);
                     }
                     else
                     {
-                        h = ((r_derived - g_derived) / delta + 4);
+                        h = (((r_derived - g_derived) / delta) + 4);
                     }
                     h *= 60;
                 }
@@ -79,9 +79,19 @@ const float getImageHSV(const sf::Texture tex)
             }
         }
         auto avg = acc / px_count;
+        auto avg_drv{ avg / 360.f };
+        float integ{ 0.0f };
+        float frac = modf(avg_drv, &integ);
+        auto hueMapped = frac * (avg_drv + (1 / 6));
         img.~Image();
-        return avg;
+        return hueMapped;
+        //return avg;
     }
+}
+
+const bool isHSVGreater(std::pair<sf::Texture, float> lhs, std::pair<sf::Texture, float> rhs)
+{
+    return lhs.second < rhs.second;
 }
 
 int main()
@@ -91,22 +101,29 @@ int main()
     // example folder to load images
     constexpr char* image_folder = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/unsorted";
     std::vector<std::string> imageFilenames;
-    int fileCount{ 0 };
     for (auto& p : fs::directory_iterator(image_folder))
     {
         imageFilenames.push_back(p.path().u8string());
-        ++fileCount;
     }
 
+    int fileCount{ (int)imageFilenames.size() };
     std::vector<std::pair<sf::Texture, float>> texs(fileCount);
-    //auto threadCount = std::thread::hardware_concurrency();
-#pragma parallel for num_threads(std::thread::hardware_concurreny()) schedule(dynamic) // #TODO: test performance here
+    auto threadCount = std::thread::hardware_concurrency()/4;
+#pragma omp parallel for num_threads(threadCount) schedule(static) // #TODO: test performance here
     for (int i = 0; i < fileCount; i++)
     {
-        if (!texs[i].first.loadFromFile(imageFilenames[i]))
-            return EXIT_FAILURE;
-        texs[i].second = getImageHSV(texs[i].first);
+        if (texs[i].first.loadFromFile(imageFilenames[i]))
+        {
+            texs[i].second = getImageHSV(texs[i].first);
+        }
+        else
+        {
+            texs[i].first = sf::Texture();
+            texs[i].second = -1;
+        }
     }
+
+    std::sort(texs.begin(), texs.end(), isHSVGreater);
 
     // Define some constants
     const float pi = 3.14159f;
@@ -122,7 +139,7 @@ int main()
 
     // Load an image to begin with
     sf::Texture texture;
-    if (!texture.loadFromFile(imageFilenames[imageIndex]))
+    if (!texture.loadFromFile("G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/placeholder/placeholder.jpg"))
         return EXIT_FAILURE;
     sf::Sprite sprite (texture);
     // Make sure the texture fits the screen
@@ -167,7 +184,7 @@ int main()
                 // ... and load the appropriate texture, and put it in the sprite
                 if (texture.loadFromFile(imageFilename))
                 {
-                    sprite = sf::Sprite(texture);
+                    sprite = sf::Sprite(texs[imageIndex].first);
                     sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
                 }
             }
