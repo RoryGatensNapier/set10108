@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <omp.h>
 #include <thread>
+#include <iostream>
 
 namespace fs = std::filesystem;
 
@@ -22,11 +23,13 @@ sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidt
     return { scale, scale };
 }
 
-const float getImageHSV(const sf::Texture tex)
+const double getImageHSV(const sf::Texture tex)
 {
-    float h = 0, s = 0, v = 0, acc = 0, px_count = 0;
+    double h{ 0.0 }, s{ 0.0 }, v{ 0.0 };
+    int acc{ 0 }, px_count{ 0 };
     auto size = tex.getSize();
     px_count = size.x * size.y;
+    std::vector<double> hueValues(px_count);
     auto img = tex.copyToImage();
 
     if (img.getPixelsPtr())
@@ -36,23 +39,12 @@ const float getImageHSV(const sf::Texture tex)
             for (int x = 0; x < size.x; x++)
             {
                 auto col = img.getPixel(x, y);
-                auto r_derived = col.r / 255.0f;
-                auto g_derived = col.g / 255.0f;
-                auto b_derived = col.b / 255.0f;
+                auto r_derived = col.r / 255.0;
+                auto g_derived = col.g / 255.0;
+                auto b_derived = col.b / 255.0;
                 auto cmax = std::max(std::max(r_derived, g_derived), b_derived);
                 auto cmin = std::min(std::min(r_derived, g_derived), b_derived);
                 auto delta = cmax - cmin;
-
-                v = cmax;
-
-                if (cmax != 0)
-                {
-                    s = cmax / delta;
-                }
-                else
-                {
-                    s = 0;
-                }
 
                 if (delta != 0)
                 {
@@ -74,18 +66,30 @@ const float getImageHSV(const sf::Texture tex)
                 {
                     h = 0;
                 }
-
-                acc += h;
+                if (h < 0)
+                {
+                    //h += 360;
+                }
+                hueValues[acc] = h;
+                ++acc;
             }
         }
-        auto avg = acc / px_count;
-        auto avg_drv{ avg / 360.f };
-        float integ{ 0.0f };
-        float frac = modf(avg_drv, &integ);
-        auto hueMapped = frac * (avg_drv + (1 / 6));
+        double median{ 0.0f };
+        std::sort(hueValues.begin(), hueValues.end());
+        if (px_count % 2 == 0)
+        {
+            median = (hueValues[px_count / 2] + hueValues[(px_count / 2) + 1]) / 2;
+        }
+        else
+        {
+            median = hueValues[(px_count + 1) / 2];
+        }
+        auto mid_drv{ median / 360.f };
+        double integ{ 0.0 };
+        double frac = modf(mid_drv, &integ);
+        auto hueMapped = frac * (mid_drv + (1 / 6));
         img.~Image();
         return hueMapped;
-        //return avg;
     }
 }
 
@@ -94,21 +98,32 @@ const bool isHSVGreater(std::pair<sf::Texture, float> lhs, std::pair<sf::Texture
     return lhs.second < rhs.second;
 }
 
+void GetImageFilenames(const char* folder, std::vector<std::string> *output)
+{
+    for (auto& p : fs::directory_iterator(folder))
+    {
+        output->resize(output->size() + 1);
+        output->back() = p.path().u8string();
+    }
+}
+
 int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
-    // example folder to load images
     constexpr char* image_folder = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/unsorted";
-    std::vector<std::string> imageFilenames;
-    for (auto& p : fs::directory_iterator(image_folder))
-    {
-        imageFilenames.push_back(p.path().u8string());
-    }
+    std::vector<std::string> imageFilenames(0);
+    //std::vector<std::pair<sf::Texture, double>> texs(0); //-- implement this with same resize method as used in the filenames function
+    // 
+    //#TODO: push this into a threaded structure w/ main load thread that spawns other workers once all the file names have been gathered
+    //While texs != imageFilenames.size() then do all this stuff, then once complete join and allow place holder to be removed
+    GetImageFilenames(image_folder, &imageFilenames);
 
-    int fileCount{ (int)imageFilenames.size() };
-    std::vector<std::pair<sf::Texture, float>> texs(fileCount);
-    auto threadCount = std::thread::hardware_concurrency()/4;
+    int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
+    std::vector<std::pair<sf::Texture, double>> texs(fileCount);
+    auto threadCount = std::thread::hardware_concurrency();
+    sf::Clock timer;
+    timer.restart();
 #pragma omp parallel for num_threads(threadCount) schedule(static) // #TODO: test performance here
     for (int i = 0; i < fileCount; i++)
     {
@@ -122,7 +137,8 @@ int main()
             texs[i].second = -1;
         }
     }
-
+    
+    auto time = timer.getElapsedTime().asMilliseconds();
     std::sort(texs.begin(), texs.end(), isHSVGreater);
 
     // Define some constants
@@ -141,7 +157,7 @@ int main()
     sf::Texture texture;
     if (!texture.loadFromFile("G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/placeholder/placeholder.jpg"))
         return EXIT_FAILURE;
-    sf::Sprite sprite (texture);
+    sf::Sprite sprite (texs[0].first);
     // Make sure the texture fits the screen
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
 
@@ -152,6 +168,12 @@ int main()
         sf::Event event;
         while (window.pollEvent(event))
         {
+            // This currently works as is with just GetImageFilenames
+            //std::thread loadThread([&] {
+            //    GetImageFilenames(image_folder, &imageFilenames);
+            //    // ...
+            //    });
+
             // Window closed or escape key pressed: exit
             if ((event.type == sf::Event::Closed) ||
                ((event.type == sf::Event::KeyPressed) && (event.key.code == sf::Keyboard::Escape)))
@@ -187,6 +209,7 @@ int main()
                     sprite = sf::Sprite(texs[imageIndex].first);
                     sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
                 }
+                std::cout << imageIndex << std::endl;
             }
         }
 
