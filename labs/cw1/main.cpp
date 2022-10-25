@@ -274,12 +274,14 @@ int main()
     std::unique_ptr<std::thread> loadThread{ nullptr };
     bool contentLoaded{ false };
 
+    sf::Clock clock;
+
     while (window.isOpen())
     {
 #if USE_SINGLE_THREAD   //  Setting to create load thread to handle overarching management and processing
-        sf::Clock clock;
         if (!loadThread && !contentLoaded)
         {
+            clock.restart();
             loadThread = std::make_unique<std::thread>([&] {
 #if FAKE_DELAY
                 std::this_thread::sleep_for(std::chrono::seconds(20));
@@ -351,7 +353,7 @@ int main()
         {
             loadThread->join();
             loadThread.reset();
-            auto time = clock.getElapsedTime().asMicroseconds();
+            auto time = clock.getElapsedTime().asMilliseconds();
         }
 
         // Clear the window
