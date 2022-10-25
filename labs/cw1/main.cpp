@@ -23,6 +23,7 @@ namespace fs = std::filesystem;
 #define USE_STB_IMAGE 0
 #define USE_SINGLE_THREAD 1
 #define SINGLE_THREAD_SPAWN_WORKERS 1
+#define FAKE_DELAY 0
 
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
@@ -280,7 +281,9 @@ int main()
         if (!loadThread && !contentLoaded)
         {
             loadThread = std::make_unique<std::thread>([&] {
+#if FAKE_DELAY
                 std::this_thread::sleep_for(std::chrono::seconds(20));
+#endif // FAKE_DELAY
                 GetImageFilenames(image_folder, &imageFilenames);
                 int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
                 texs.resize(fileCount);
@@ -298,8 +301,7 @@ int main()
                 std::sort(texs.begin(), texs.end(), isHSVGreater_ver2);
                 contentLoaded = true;
             });
-        }
-        
+        }  
 #endif // USE_SINGLE_THREAD
 
         // Handle events
@@ -343,13 +345,13 @@ int main()
                 }
                 std::cout << imageIndex << std::endl;
             }
+        }
 
-            if (loadThread && contentLoaded)
-            {
-                loadThread->join();
-                loadThread.reset();
-                auto time = clock.getElapsedTime().asMilliseconds();
-            }
+        if (loadThread && contentLoaded)
+        {
+            loadThread->join();
+            loadThread.reset();
+            auto time = clock.getElapsedTime().asMicroseconds();
         }
 
         // Clear the window
