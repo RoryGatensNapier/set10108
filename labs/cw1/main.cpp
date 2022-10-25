@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 #define USE_SINGLE_THREAD 1
 #define SINGLE_THREAD_SPAWN_WORKERS 1
 #define FAKE_DELAY 0
+#define USE_OMP_HSV 0
 
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
@@ -140,6 +141,10 @@ const double getImageHSV_stb(const sf::Vector3f data)
 const double RetrieveImageHSV(const uint8_t* imgdata, const int width, const int height, const int dim)
 {
     std::vector<double> hueValues(width * height);
+#if USE_OMP_HSV
+    auto threadCount = std::thread::hardware_concurrency();
+#pragma omp parallel for num_threads(threadCount - 3) schedule(dynamic)
+#endif
     for (int y = 0; y < height; ++y)
         for (int x = 0; x < width; ++x)
         {
@@ -306,6 +311,19 @@ int main()
         }  
 #endif // USE_SINGLE_THREAD
 
+        if (sprite.getTexture() == &texture && contentLoaded)
+        {
+            const auto& imageFilename = imageFilenames[texs[0].first];
+            // set it as the window title 
+            window.setTitle(imageFilename);
+            // ... and load the appropriate texture, and put it in the sprite
+            if (texture.loadFromFile(imageFilename))
+            {
+                sprite = sf::Sprite(texture);
+                sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
+            }
+        }
+
         // Handle events
         sf::Event event;
         while (window.pollEvent(event))
@@ -354,6 +372,7 @@ int main()
             loadThread->join();
             loadThread.reset();
             auto time = clock.getElapsedTime().asMilliseconds();
+            std::cout << time << "ms to load photos" << std::endl;
         }
 
         // Clear the window
