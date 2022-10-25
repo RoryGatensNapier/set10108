@@ -12,8 +12,15 @@
 #include <omp.h>
 #include <thread>
 #include <iostream>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 namespace fs = std::filesystem;
+
+#define USE_SFML 0
+#define USE_STB_IMAGE 1
 
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
@@ -21,6 +28,33 @@ sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidt
     float scaleY = screenHeight / float(textureSize.y);
     float scale = std::min(scaleX, scaleY);
     return { scale, scale };
+}
+
+std::vector<sf::Vector3f> RetrieveImageRGB(const char* filename, int& width, int& height)
+{
+    int n;
+    auto imgdata = (uint8_t*)stbi_load(filename, &width, &height, &n, 0);
+    std::vector<sf::Vector3f> values(width * height);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            int o = x + y * width; // 1d index
+            // is it RGB or RGBA?
+            if (n >= 3)
+            {
+                float r = imgdata[o * n] / 255.0f;
+                float g = imgdata[o * n + 1] / 255.0f;
+                float b = imgdata[o * n + 2] / 255.0f;
+                values[o] = sf::Vector3f(r, g, b);    // 0.2126f * r + 0.7152f * g + 0.0722f * b; // RGB -> grayscale conversion formula
+            }
+            else if (n == 1)
+            {
+                //values[o] = imgdata[o] / 255.0f;
+                throw std::errc::no_such_process;
+            }
+        }
+    stbi_image_free(imgdata);
+    return values;
 }
 
 const double getImageHSV(const sf::Texture tex)
@@ -93,7 +127,66 @@ const double getImageHSV(const sf::Texture tex)
     }
 }
 
+const double getImageHSV_ver2(const std::vector<sf::Vector3f> data)
+{
+    float h{ 0.0 }, s{ 0.0 }, v{ 0.0 };
+    std::vector<float> hueValues(data.size());
+    
+    for (int x = 0; x < (int)data.size(); x++)
+    {
+        auto cmax = std::max(std::max(data[x].x, data[x].y), data[x].z);
+        auto cmin = std::min(std::min(data[x].x, data[x].y), data[x].z);
+        auto delta = cmax - cmin;
+
+        if (delta != 0)
+        {
+            if (cmax == data[x].x)
+            {
+                h = ((data[x].y - data[x].z) / delta);
+            }
+            else if (cmax == data[x].y)
+            {
+                h = (((data[x].z - data[x].x) / delta) + 2);
+            }
+            else
+            {
+                h = (((data[x].x - data[x].y) / delta) + 4);
+            }
+            h *= 60;
+        }
+        else
+        {
+            h = 0;
+        }
+        if (h < 0)
+        {
+            //h += 360;
+        }
+        hueValues[x] = h;
+    }
+    float median{ 0.0f };
+    std::sort(hueValues.begin(), hueValues.end());
+    if ((int)data.size() % 2 == 0)
+    {
+        median = (hueValues[(int)data.size() / 2] + hueValues[((int)data.size() / 2) + 1]) / 2;
+    }
+    else
+    {
+        median = hueValues[((int)data.size() + 1) / 2];
+    }
+    auto mid_drv{ median / 360.f };
+    float integ{ 0.0 };
+    float frac = modf(mid_drv, &integ);
+    auto hueMapped = frac * (mid_drv + (1 / 6));
+    return hueMapped;
+}
+
 const bool isHSVGreater(std::pair<sf::Texture, float> lhs, std::pair<sf::Texture, float> rhs)
+{
+    return lhs.second < rhs.second;
+}
+
+const bool isHSVGreater_ver2(std::pair<int, float> lhs, std::pair<int, float> rhs)
 {
     return lhs.second < rhs.second;
 }
@@ -111,7 +204,8 @@ int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
-    constexpr char* image_folder = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/unsorted";
+    constexpr char* image_folder = "D:/CPS_CW1_IMG/image_fever_example/unsorted/"; // "G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/unsorted";
+    auto threadCount = std::thread::hardware_concurrency()/4;
     std::vector<std::string> imageFilenames(0);
     //std::vector<std::pair<sf::Texture, double>> texs(0); //-- implement this with same resize method as used in the filenames function
     // 
@@ -120,10 +214,10 @@ int main()
     GetImageFilenames(image_folder, &imageFilenames);
 
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
-    std::vector<std::pair<sf::Texture, double>> texs(fileCount);
-    auto threadCount = std::thread::hardware_concurrency();
     sf::Clock timer;
     timer.restart();
+#if USE_SFML
+    std::vector<std::pair<sf::Texture, double>> texs(fileCount);
 #pragma omp parallel for num_threads(threadCount) schedule(static) // #TODO: test performance here
     for (int i = 0; i < fileCount; i++)
     {
@@ -137,9 +231,24 @@ int main()
             texs[i].second = -1;
         }
     }
-    
-    auto time = timer.getElapsedTime().asMilliseconds();
+
     std::sort(texs.begin(), texs.end(), isHSVGreater);
+#endif // USE_SFML
+
+#if USE_STB_IMAGE
+    std::vector<std::pair<int, float>> texs(fileCount);
+#pragma omp parallel for num_threads(threadCount) schedule(dynamic)
+    for (int i{ 0 }; i < fileCount; ++i)
+    {
+        int width{ 0 }, height{ 0 };
+        auto imageData = RetrieveImageRGB(imageFilenames[i].c_str(), width, height);
+        texs[i].first = i;
+        texs[i].second = getImageHSV_ver2(imageData);
+    }
+    std::sort(texs.begin(), texs.end(), isHSVGreater_ver2);
+#endif // USE_STB_IMAGE
+
+    auto time = timer.getElapsedTime().asMilliseconds();
 
     // Define some constants
     const float pi = 3.14159f;
@@ -155,9 +264,9 @@ int main()
 
     // Load an image to begin with
     sf::Texture texture;
-    if (!texture.loadFromFile("G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/placeholder/placeholder.jpg"))
+    if (!texture.loadFromFile("D:/CPS_CW1_IMG/image_fever_example/labs/test_out.png"))    //"G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/placeholder/placeholder.jpg"))
         return EXIT_FAILURE;
-    sf::Sprite sprite (texs[0].first);
+    sf::Sprite sprite (texture);
     // Make sure the texture fits the screen
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
 
@@ -200,13 +309,13 @@ int main()
                 else if (event.key.code == sf::Keyboard::Key::Right)
                     imageIndex = (imageIndex + 1) % imageFilenames.size();
                 // get image filename
-                const auto& imageFilename = imageFilenames[imageIndex];
+                const auto& imageFilename = imageFilenames[texs[imageIndex].first];
                 // set it as the window title 
                 window.setTitle(imageFilename);
                 // ... and load the appropriate texture, and put it in the sprite
                 if (texture.loadFromFile(imageFilename))
                 {
-                    sprite = sf::Sprite(texs[imageIndex].first);
+                    sprite = sf::Sprite(texture);
                     sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
                 }
                 std::cout << imageIndex << std::endl;

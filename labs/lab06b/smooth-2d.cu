@@ -87,13 +87,13 @@ void save_grayscale_png(const char* filename, const std::vector<float>& values, 
 
 int main(int argc, char **argv)
 {
-	if (argc == 1)
-	{
-		printf("Please provide an image filename as the argument (full path). The program will create a new image with the suffix _out.png and will place it alongside the original image");
-		exit(0);
-	}
+	//if (argc == 1)
+	//{
+	//	printf("Please provide an image filename as the argument (full path). The program will create a new image with the suffix _out.png and will place it alongside the original image");
+	//	exit(0);
+	//}
 	int width, int height;
-	std::string filename_in = argv[1];
+	std::string filename_in = "D:/CPS_CW1_IMG/image_fever_example/labs/test.jpg";
 	auto h_values_in = load_image_to_grayscale(filename_in.c_str(), width, height);
 	const size_t NUM_PIXELS = h_values_in.size();
 
