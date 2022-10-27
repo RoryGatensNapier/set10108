@@ -278,6 +278,7 @@ int main()
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
     std::unique_ptr<std::thread> loadThread{ nullptr };
     bool contentLoaded{ false };
+    bool rmvdPlaceholder{ false };
 
     sf::Clock clock;
 
@@ -311,7 +312,7 @@ int main()
         }  
 #endif // USE_SINGLE_THREAD
 
-        if (sprite.getTexture() == &texture && contentLoaded)
+        if (sprite.getTexture() == &texture && contentLoaded && !rmvdPlaceholder)
         {
             const auto& imageFilename = imageFilenames[texs[0].first];
             // set it as the window title 
@@ -322,6 +323,7 @@ int main()
                 sprite = sf::Sprite(texture);
                 sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
             }
+            rmvdPlaceholder = true;
         }
 
         // Handle events
@@ -363,7 +365,7 @@ int main()
                     sprite = sf::Sprite(texture);
                     sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
                 }
-                std::cout << imageIndex << std::endl;
+                std::cout << "Image index = " << imageIndex << std::endl;
             }
         }
 
