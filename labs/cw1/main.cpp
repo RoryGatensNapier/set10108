@@ -291,7 +291,7 @@ int main()
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
 
     //  Planned external threads that will manage 
-    std::unique_ptr<std::thread> loadThread{ nullptr };
+    std::unique_ptr<std::thread> hsvThread{ nullptr };
     std::unique_ptr<std::thread> textureThread{ nullptr };
 
     // Main thread indicators for external thread usage
@@ -304,10 +304,10 @@ int main()
     while (window.isOpen())
     {
 #if USE_SINGLE_THREAD   //  Setting to create load thread to handle overarching management and processing
-        if (!loadThread && !dataRetrieved)
+        if (!hsvThread && !dataRetrieved)
         {
             clock1.restart();
-            loadThread = std::make_unique<std::thread>([&] {
+            hsvThread = std::make_unique<std::thread>([&] {
 #if FAKE_DELAY
                 std::this_thread::sleep_for(std::chrono::seconds(20));
 #endif // FAKE_DELAY
@@ -418,12 +418,12 @@ int main()
 #endif // !USE_TEXTURE_THREAD
         }
 
-        if (loadThread && dataRetrieved)
+        if (hsvThread && dataRetrieved)
         {
-            loadThread->join();
-            loadThread.reset();
+            hsvThread->join();
+            hsvThread.reset();
             auto time = clock1.getElapsedTime().asMilliseconds();
-            std::cout << time << "ms to load photos" << std::endl;
+            std::cout << time << "ms to process photos" << std::endl;
         }
 
 #if USE_TEXTURE_THREAD
