@@ -312,7 +312,7 @@ int main()
                 std::this_thread::sleep_for(std::chrono::seconds(20));
 #endif // FAKE_DELAY
                 GetImageFilenames(image_folder, &imageFilenames);
-#ifdef USE_TEXTURE_THREAD
+#if USE_TEXTURE_THREAD
                 textureThread = std::make_unique<std::thread>([&] { clock2.restart();  LoadImagesToVector(imageFilenames, &imgSprites); imagesSprited = true; });
 #endif // DEBUG
                 imgData.resize((int)imageFilenames.size());
