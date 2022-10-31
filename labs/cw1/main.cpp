@@ -25,6 +25,7 @@ namespace fs = std::filesystem;
 #define SINGLE_THREAD_SPAWN_WORKERS 1
 #define FAKE_DELAY 0
 #define USE_OMP_HSV 0
+#define USE_TEXTURE_THREAD 1
 
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
@@ -201,6 +202,17 @@ void GetImageFilenames(const char* folder, std::vector<std::string> *output)
     }
 }
 
+void LoadImagesToVector(const std::vector<std::string> fileNames, std::vector<sf::Texture> *output)
+{
+    for (auto n : fileNames)
+    {
+        output->resize(output->size() + 1);
+        sf::Texture tempTex;
+        tempTex.loadFromFile(n);
+        output->back() = tempTex;
+    }
+}
+
 int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
@@ -261,7 +273,8 @@ int main()
 
 #if USE_SINGLE_THREAD
     std::vector<std::string> imageFilenames(0);
-    std::vector<std::pair<int, float>> texs(0);
+    std::vector<std::pair<int, float>> imgData(0);
+    std::vector<sf::Texture> imgSprites(0);
 #endif // USE_SINGLE_THREAD
 
     // Create the window of the application
@@ -276,45 +289,54 @@ int main()
     sf::Sprite sprite (texture);
     // Make sure the texture fits the screen
     sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
+
+    //  Planned external threads that will manage 
     std::unique_ptr<std::thread> loadThread{ nullptr };
-    bool contentLoaded{ false };
+    std::unique_ptr<std::thread> textureThread{ nullptr };
+
+    // Main thread indicators for external thread usage
+    bool dataRetrieved{ false };
+    bool imagesSprited{ false };
     bool rmvdPlaceholder{ false };
 
-    sf::Clock clock;
+    sf::Clock clock1, clock2;
 
     while (window.isOpen())
     {
 #if USE_SINGLE_THREAD   //  Setting to create load thread to handle overarching management and processing
-        if (!loadThread && !contentLoaded)
+        if (!loadThread && !dataRetrieved)
         {
-            clock.restart();
+            clock1.restart();
             loadThread = std::make_unique<std::thread>([&] {
 #if FAKE_DELAY
                 std::this_thread::sleep_for(std::chrono::seconds(20));
 #endif // FAKE_DELAY
                 GetImageFilenames(image_folder, &imageFilenames);
-                int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
-                texs.resize(fileCount);
+#ifdef USE_TEXTURE_THREAD
+                textureThread = std::make_unique<std::thread>([&] { clock2.restart();  LoadImagesToVector(imageFilenames, &imgSprites); imagesSprited = true; });
+#endif // DEBUG
+                imgData.resize((int)imageFilenames.size());
 #if SINGLE_THREAD_SPAWN_WORKERS //  Allows load thread to spawn other worker threads to manage the image processing workload
-#pragma omp parallel for num_threads(threadCount - 1) schedule(dynamic)
+#pragma omp parallel for num_threads(threadCount) schedule(dynamic)
 #endif // SINGLE_THREAD_SPAWN_WORKERS
-                for (int i{ 0 }; i < fileCount; ++i)
+                for (int i{ 0 }; i < (int)imgData.size(); ++i)
                 {
                     int w{ 0 }, h{ 0 }, n{ 0 };
                     auto imageData = stbi_load(imageFilenames[i].c_str(), &w, &h, &n, 0);
-                    texs[i].first = i;
-                    texs[i].second = RetrieveImageHSV(imageData, w, h, n);
+                    imgData[i].first = i;
+                    imgData[i].second = RetrieveImageHSV(imageData, w, h, n);
                     stbi_image_free(imageData);
                 }
-                std::sort(texs.begin(), texs.end(), isHSVGreater_ver2);
-                contentLoaded = true;
+                std::sort(imgData.begin(), imgData.end(), isHSVGreater_ver2);
+                dataRetrieved = true;
             });
         }  
 #endif // USE_SINGLE_THREAD
 
-        if (sprite.getTexture() == &texture && contentLoaded && !rmvdPlaceholder)
+#if !USE_TEXTURE_THREAD
+        if (sprite.getTexture() == &texture && dataRetrieved && !rmvdPlaceholder)
         {
-            const auto& imageFilename = imageFilenames[texs[0].first];
+            const auto& imageFilename = imageFilenames[imgData[0].first];
             // set it as the window title 
             window.setTitle(imageFilename);
             // ... and load the appropriate texture, and put it in the sprite
@@ -325,6 +347,18 @@ int main()
             }
             rmvdPlaceholder = true;
         }
+#else
+        if (sprite.getTexture() == &texture && dataRetrieved && imagesSprited && !rmvdPlaceholder)
+        {
+            // set it as the window title 
+            window.setTitle(imageFilenames[imgData[0].first]);
+            // ... and load the appropriate texture, and put it in the sprite
+            sprite = sf::Sprite(imgSprites[imgData[0].first]);
+            sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
+            rmvdPlaceholder = true;
+        }
+#endif // !USE_TEXTURE_THREAD
+
 
         // Handle events
         sf::Event event;
@@ -348,6 +382,7 @@ int main()
             }
 
             // Arrow key handling!
+#if !USE_TEXTURE_THREAD
             if (event.type == sf::Event::KeyPressed && imageFilenames.size() != 0)
             {
                 // adjust the image index
@@ -356,7 +391,7 @@ int main()
                 else if (event.key.code == sf::Keyboard::Key::Right)
                     imageIndex = (imageIndex + 1) % imageFilenames.size();
                 // get image filename
-                const auto& imageFilename = imageFilenames[texs[imageIndex].first];
+                const auto& imageFilename = imageFilenames[imgData[imageIndex].first];
                 // set it as the window title 
                 window.setTitle(imageFilename);
                 // ... and load the appropriate texture, and put it in the sprite
@@ -367,15 +402,40 @@ int main()
                 }
                 std::cout << "Image index = " << imageIndex << std::endl;
             }
+#else
+            if (event.type == sf::Event::KeyPressed && dataRetrieved && imagesSprited)
+            {
+                // adjust the image index
+                if (event.key.code == sf::Keyboard::Key::Left)
+                    imageIndex = (imageIndex + imageFilenames.size() - 1) % imageFilenames.size();
+                else if (event.key.code == sf::Keyboard::Key::Right)
+                    imageIndex = (imageIndex + 1) % imageFilenames.size();
+                
+                window.setTitle(imageFilenames[imgData[imageIndex].first]);
+                sprite = sf::Sprite(imgSprites[imgData[imageIndex].first]);
+                sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
+            }
+#endif // !USE_TEXTURE_THREAD
         }
 
-        if (loadThread && contentLoaded)
+        if (loadThread && dataRetrieved)
         {
             loadThread->join();
             loadThread.reset();
-            auto time = clock.getElapsedTime().asMilliseconds();
+            auto time = clock1.getElapsedTime().asMilliseconds();
             std::cout << time << "ms to load photos" << std::endl;
         }
+
+#if USE_TEXTURE_THREAD
+        if (textureThread && imagesSprited)
+        {
+            textureThread->join();
+            textureThread.reset();
+            auto time = clock2.getElapsedTime().asMilliseconds();
+            std::cout << time << "ms to make sprites" << std::endl;
+        }
+#endif // USE_TEXTURE_THREAD
+
 
         // Clear the window
         window.clear(sf::Color(0, 0, 0));
