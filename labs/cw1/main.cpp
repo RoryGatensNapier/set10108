@@ -21,11 +21,12 @@ namespace fs = std::filesystem;
 
 #define USE_SFML 0
 #define USE_STB_IMAGE 0
-#define USE_SINGLE_THREAD 1
+#define USE_PROCESSOR_THREAD 1
 #define SINGLE_THREAD_SPAWN_WORKERS 1
 #define FAKE_DELAY 0
 #define USE_OMP_HSV 0
 #define USE_TEXTURE_THREAD 1
+#define THREAD_OVRHD (USE_PROCESSOR_THREAD + USE_TEXTURE_THREAD)
 
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
@@ -144,7 +145,7 @@ const double RetrieveImageHSV(const uint8_t* imgdata, const int width, const int
     std::vector<double> hueValues(width * height);
 #if USE_OMP_HSV
     auto threadCount = std::thread::hardware_concurrency();
-#pragma omp parallel for num_threads(threadCount - 3) schedule(dynamic)
+#pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(dynamic)
 #endif
     for (int y = 0; y < height; ++y)
         for (int x = 0; x < width; ++x)
@@ -217,7 +218,8 @@ int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
-    constexpr char* image_folder = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/unsorted";
+    constexpr char* image_folder = "./unsorted";
+
     auto threadCount = std::thread::hardware_concurrency();
 
     sf::Clock timer;
@@ -227,7 +229,7 @@ int main()
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
 
     std::vector<std::pair<sf::Texture, double>> texs(fileCount);
-#pragma omp parallel for num_threads(threadCount) schedule(static) // #TODO: test performance here
+#pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(static) // #TODO: test performance here
     for (int i = 0; i < fileCount; i++)
     {
         if (texs[i].first.loadFromFile(imageFilenames[i]))
@@ -250,7 +252,7 @@ int main()
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
 
     std::vector<std::pair<int, float>> texs(fileCount);
-#pragma omp parallel for num_threads(threadCount) schedule(dynamic)
+#pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(dynamic)
     for (int i{ 0 }; i < fileCount; ++i)
     {
         int w{ 0 }, h{ 0 }, n{ 0 };
@@ -271,7 +273,7 @@ int main()
 
     int imageIndex = 0;
 
-#if USE_SINGLE_THREAD
+#if USE_PROCESSOR_THREAD
     std::vector<std::string> imageFilenames(0);
     std::vector<std::pair<int, float>> imgData(0);
     std::vector<sf::Texture> imgSprites(0);
@@ -284,7 +286,7 @@ int main()
 
     // Load an image to begin with
     sf::Texture texture;
-    if (!texture.loadFromFile("G:/NapierWork/4th Year/Concurrent and Parallel Systems/image_fever_example/placeholder/placeholder.jpg"))
+    if (!texture.loadFromFile("./placeholder/placeholder.png"))
         return EXIT_FAILURE;
     sf::Sprite sprite (texture);
     // Make sure the texture fits the screen
@@ -303,7 +305,7 @@ int main()
 
     while (window.isOpen())
     {
-#if USE_SINGLE_THREAD   //  Setting to create load thread to handle overarching management and processing
+#if USE_PROCESSOR_THREAD   //  Setting to create load thread to handle overarching management and processing
         if (!hsvThread && !dataRetrieved)
         {
             clock1.restart();
@@ -317,7 +319,7 @@ int main()
 #endif // DEBUG
                 imgData.resize((int)imageFilenames.size());
 #if SINGLE_THREAD_SPAWN_WORKERS //  Allows load thread to spawn other worker threads to manage the image processing workload
-#pragma omp parallel for num_threads(threadCount) schedule(dynamic)
+#pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(dynamic)
 #endif // SINGLE_THREAD_SPAWN_WORKERS
                 for (int i{ 0 }; i < (int)imgData.size(); ++i)
                 {
