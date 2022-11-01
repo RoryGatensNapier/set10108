@@ -87,7 +87,7 @@ const double getImageHSV(const sf::Texture tex)
                 ++acc;
             }
         }
-        double median{ 0.0f };
+        double median{ 0.0 };
         std::sort(hueValues.begin(), hueValues.end());
         if (px_count % 2 == 0)
         {
@@ -218,12 +218,12 @@ int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
-    constexpr char* image_folder = "./unsorted";
+    const char* image_folder{ "./unsorted" };
 
-    auto threadCount = std::thread::hardware_concurrency();
+    auto threadCount{ std::thread::hardware_concurrency() };
 
-    sf::Clock timer;
 #if USE_SFML
+    sf::Clock timer;
     std::vector<std::string> imageFilenames(0);
     GetImageFilenames(image_folder, &imageFilenames);
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
@@ -244,9 +244,11 @@ int main()
     }
 
     std::sort(texs.begin(), texs.end(), isHSVGreater);
+    auto time{ timer.getElapsedTime().asMilliseconds() };
 #endif // USE_SFML
 
 #if USE_STB_IMAGE
+    sf::Clock timer;
     std::vector<std::string> imageFilenames(0);
     GetImageFilenames(image_folder, &imageFilenames);
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
@@ -262,16 +264,16 @@ int main()
         stbi_image_free(imageData);
     }
     std::sort(texs.begin(), texs.end(), isHSVGreater_ver2);
+    auto time{ timer.getElapsedTime().asMilliseconds() };
 #endif // USE_STB_IMAGE
 
-    auto time = timer.getElapsedTime().asMilliseconds();
 
     // Define some constants
-    const float pi = 3.14159f;
-    const int gameWidth = 800;
-    const int gameHeight = 600;
+    const float pi{ 3.14159f };
+    const int gameWidth{ 800 };
+    const int gameHeight{ 600 };
 
-    int imageIndex = 0;
+    int imageIndex{ 0 };
 
 #if USE_PROCESSOR_THREAD
     std::vector<std::string> imageFilenames(0);
