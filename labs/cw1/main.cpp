@@ -353,7 +353,7 @@ int main()
     // Make sure the texture fits the screen
     sprite.setScale(ScaleFromDimensions(placeholderTexture.getSize(),gameWidth,gameHeight));
 
-    //  Planned external threads that will manage 
+    //  Background threads that will manage processing
     std::unique_ptr<std::thread> hsvThread{ nullptr };
     std::unique_ptr<std::thread> textureThread{ nullptr };
 
@@ -373,7 +373,7 @@ int main()
         {
             clock1.restart();
             hsvThread = std::make_unique<std::thread>([&] {
-#if FAKE_DELAY
+#if FAKE_DELAY  //  Fake delay used for testing
                 std::this_thread::sleep_for(std::chrono::seconds(20));
 #endif // FAKE_DELAY
 #if USE_STRUCT
@@ -382,7 +382,7 @@ int main()
                 GetImageFilenames(image_folder, &imageFilenames);
 #endif // USE_STRUCT
 #if USE_TEXTURE_THREAD
-#if USE_STRUCT
+#if USE_STRUCT  // Modifies thread operations to suit using struct configuration
                 textureThread = std::make_unique<std::thread>([&] { clock2.restart();  LoadImagesToStructuredVector(&Images); imagesSprited = true; });
 #else
                 textureThread = std::make_unique<std::thread>([&] { clock2.restart();  LoadImagesToVector(imageFilenames, &imgSprites); imagesSprited = true; });
@@ -421,7 +421,7 @@ int main()
         }  
 #endif // USE_PROCESSOR_THREAD
 
-#if !USE_TEXTURE_THREAD && !USE_STB_IMAGE && !USE_SFML
+#if !USE_TEXTURE_THREAD && !USE_STB_IMAGE && !USE_SFML  //  Removes placeholder when not using progressive struct configuration
         if (sprite.getTexture() == &placeholderTexture && dataRetrieved && !rmvdPlaceholder)
         {
             const auto& imageFilename = imageFilenames[imgData[0].first];
@@ -436,7 +436,7 @@ int main()
             rmvdPlaceholder = true;
         }
 #else
-#if USE_STRUCT
+#if USE_STRUCT  // Updated initial image when the images is available in the progressive loading configuration
         if (Images.size() != 0)
         {
             if (sprite.getTexture() == placeholderSprite.getTexture() && Images[imageIndex].txrReady)
@@ -482,7 +482,7 @@ int main()
             }
 
             // Arrow key handling!
-#if !USE_TEXTURE_THREAD
+#if !USE_TEXTURE_THREAD //  Handles variable changes between configurations with relation to the image display controls
             if (event.type == sf::Event::KeyPressed && imageFilenames.size() != 0)
             {
                 // adjust the image index
@@ -553,7 +553,8 @@ int main()
 #endif
 #endif // !USE_TEXTURE_THREAD
         }
-
+        //  Preprocessors below only tidy up compiled code for when not using the background threads
+#if USE_PROCESSOR_THREAD
         if (hsvThread && dataRetrieved)
         {
             hsvThread->join();
@@ -561,7 +562,7 @@ int main()
             auto time = clock1.getElapsedTime().asMilliseconds();
             std::cout << time << "ms to process photos" << std::endl;
         }
-
+#endif
 #if USE_TEXTURE_THREAD
         if (textureThread && imagesSprited)
         {
