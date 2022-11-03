@@ -27,6 +27,15 @@ namespace fs = std::filesystem;
 #define USE_OMP_HSV 0
 #define USE_TEXTURE_THREAD 1
 #define THREAD_OVRHD (USE_PROCESSOR_THREAD + USE_TEXTURE_THREAD)
+#define USE_STRUCT 1
+
+struct ProcessedImage {
+    int ID{ 0 };
+    float HSV_Value{ 0.0f };
+    std::string fileLocation;
+    sf::Texture Texture;
+    bool txrReady{ false };
+};
 
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
@@ -104,6 +113,7 @@ const double getImageHSV(const sf::Texture tex)
         img.~Image();
         return hueMapped;
     }
+    return 0;
 }
 
 const double getImageHSV_stb(const sf::Vector3f data)
@@ -194,12 +204,29 @@ const bool isHSVGreater_ver2(std::pair<int, float> lhs, std::pair<int, float> rh
     return lhs.second < rhs.second;
 }
 
+const bool isHSVGreater_ver3(ProcessedImage lhs, ProcessedImage rhs)
+{
+    return lhs.HSV_Value < rhs.HSV_Value;
+}
+
 void GetImageFilenames(const char* folder, std::vector<std::string> *output)
 {
     for (auto& p : fs::directory_iterator(folder))
     {
         output->resize(output->size() + 1);
         output->back() = p.path().u8string();
+    }
+}
+
+void GetImageFilenamesForStruct(const char* folder, std::vector<ProcessedImage>* output)
+{
+    int IDs{ 0 };
+    for (auto& p : fs::directory_iterator(folder))
+    {
+        output->resize(output->size() + 1);
+        output->back().fileLocation = p.path().u8string();
+        output->back().ID = IDs;
+        ++IDs;
     }
 }
 
@@ -214,9 +241,20 @@ void LoadImagesToVector(const std::vector<std::string> fileNames, std::vector<sf
     }
 }
 
+void LoadImagesToStructuredVector(std::vector<ProcessedImage>* output)
+{
+    for (auto& n : *output)
+    {
+        n.Texture.loadFromFile(n.fileLocation);
+        n.txrReady = true;
+    }
+}
+
 int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
+
+    sf::Clock toMainTimer;
 
     const char* image_folder{ "./unsorted" };
 
@@ -277,9 +315,13 @@ int main()
 
 #if USE_PROCESSOR_THREAD
     std::vector<std::string> imageFilenames(0);
+#if USE_STRUCT
+    std::vector<ProcessedImage> Images(0);
+#elif !USE_STB_IMAGE && !USE_SFML
     std::vector<std::pair<int, float>> imgData(0);
     std::vector<sf::Texture> imgSprites(0);
-#endif // USE_SINGLE_THREAD
+#endif // USE_STRUCT
+#endif // USE_PROCESSOR_THREAD
 
     // Create the window of the application
     sf::RenderWindow window(sf::VideoMode(gameWidth, gameHeight, 32), "Image Fever",
@@ -287,12 +329,16 @@ int main()
     window.setVerticalSyncEnabled(true);
 
     // Load an image to begin with
+#if !USE_TEXTURE_THREAD
     sf::Texture texture;
-    if (!texture.loadFromFile("./placeholder/placeholder.png"))
+#endif
+    sf::Texture placeholderTexture;
+    if (!placeholderTexture.loadFromFile("./placeholder/placeholder.jpg"))
         return EXIT_FAILURE;
-    sf::Sprite sprite (texture);
+    sf::Sprite placeholderSprite(placeholderTexture);
+    sf::Sprite sprite(placeholderSprite);
     // Make sure the texture fits the screen
-    sprite.setScale(ScaleFromDimensions(texture.getSize(),gameWidth,gameHeight));
+    sprite.setScale(ScaleFromDimensions(placeholderTexture.getSize(),gameWidth,gameHeight));
 
     //  Planned external threads that will manage 
     std::unique_ptr<std::thread> hsvThread{ nullptr };
@@ -303,6 +349,8 @@ int main()
     bool imagesSprited{ false };
     bool rmvdPlaceholder{ false };
 
+    auto timeToMain{ toMainTimer.getElapsedTime().asMilliseconds() };
+    std::cout << timeToMain << "ms to main loop" << std::endl;
     sf::Clock clock1, clock2;
 
     while (window.isOpen())
@@ -315,52 +363,87 @@ int main()
 #if FAKE_DELAY
                 std::this_thread::sleep_for(std::chrono::seconds(20));
 #endif // FAKE_DELAY
+#if USE_STRUCT
+                GetImageFilenamesForStruct(image_folder, &Images);
+#else
                 GetImageFilenames(image_folder, &imageFilenames);
+#endif // USE_STRUCT
 #if USE_TEXTURE_THREAD
+#if USE_STRUCT
+                textureThread = std::make_unique<std::thread>([&] { clock2.restart();  LoadImagesToStructuredVector(&Images); imagesSprited = true; });
+#else
                 textureThread = std::make_unique<std::thread>([&] { clock2.restart();  LoadImagesToVector(imageFilenames, &imgSprites); imagesSprited = true; });
-#endif // DEBUG
                 imgData.resize((int)imageFilenames.size());
+#endif // USE_STRUCT
+#else
+                imgData.resize((int)imageFilenames.size());
+#endif // USE_TEXTURE_THREAD
 #if SINGLE_THREAD_SPAWN_WORKERS //  Allows load thread to spawn other worker threads to manage the image processing workload
 #pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(dynamic)
 #endif // SINGLE_THREAD_SPAWN_WORKERS
+#if USE_STRUCT
+                for (int i{ 0 }; i < (int)Images.size(); i++)
+                {
+                    int w{ 0 }, h{ 0 }, n{ 0 };
+                    auto rawData = stbi_load(Images[i].fileLocation.c_str(), &w, &h, &n, 0);
+                    Images[i].HSV_Value = RetrieveImageHSV(rawData, w, h, n);
+                    stbi_image_free(rawData);
+                }
+                std::sort(Images.begin(), Images.end(), isHSVGreater_ver3);
+                dataRetrieved = true;
+#else
                 for (int i{ 0 }; i < (int)imgData.size(); ++i)
                 {
                     int w{ 0 }, h{ 0 }, n{ 0 };
-                    auto imageData = stbi_load(imageFilenames[i].c_str(), &w, &h, &n, 0);
+                    auto rawData = stbi_load(imageFilenames[i].c_str(), &w, &h, &n, 0);
                     imgData[i].first = i;
-                    imgData[i].second = RetrieveImageHSV(imageData, w, h, n);
-                    stbi_image_free(imageData);
+                    imgData[i].second = RetrieveImageHSV(rawData, w, h, n);
+                    stbi_image_free(rawData);
                 }
                 std::sort(imgData.begin(), imgData.end(), isHSVGreater_ver2);
                 dataRetrieved = true;
+#endif // USE_STRUCT
+
             });
         }  
-#endif // USE_SINGLE_THREAD
+#endif // USE_PROCESSOR_THREAD
 
-#if !USE_TEXTURE_THREAD
-        if (sprite.getTexture() == &texture && dataRetrieved && !rmvdPlaceholder)
+#if !USE_TEXTURE_THREAD && !USE_STB_IMAGE && !USE_SFML
+        if (sprite.getTexture() == &placeholderTexture && dataRetrieved && !rmvdPlaceholder)
         {
             const auto& imageFilename = imageFilenames[imgData[0].first];
             // set it as the window title 
             window.setTitle(imageFilename);
             // ... and load the appropriate texture, and put it in the sprite
-            if (texture.loadFromFile(imageFilename))
+            if (placeholderTexture.loadFromFile(imageFilename))
             {
-                sprite = sf::Sprite(texture);
-                sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
+                sprite = sf::Sprite(placeholderTexture);
+                sprite.setScale(ScaleFromDimensions(placeholderTexture.getSize(), gameWidth, gameHeight));
             }
             rmvdPlaceholder = true;
         }
 #else
-        if (sprite.getTexture() == &texture && dataRetrieved && imagesSprited && !rmvdPlaceholder)
+#if USE_STRUCT
+        if (Images.size() != 0)
+        {
+            if (sprite.getTexture() == placeholderSprite.getTexture() && Images[imageIndex].txrReady)
+            {
+                sprite = sf::Sprite(Images[imageIndex].Texture);
+            }
+        }
+#else
+#if !USE_STB_IMAGE && !USE_SFML
+        if (sprite.getTexture() == &placeholderTexture && dataRetrieved && imagesSprited && !rmvdPlaceholder)
         {
             // set it as the window title 
             window.setTitle(imageFilenames[imgData[0].first]);
             // ... and load the appropriate texture, and put it in the sprite
             sprite = sf::Sprite(imgSprites[imgData[0].first]);
-            sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
+            sprite.setScale(ScaleFromDimensions(placeholderTexture.getSize(), gameWidth, gameHeight));
             rmvdPlaceholder = true;
         }
+#endif // !USE_STB_IMAGE && !USE_SFML
+#endif // USE_STRUCT
 #endif // !USE_TEXTURE_THREAD
 
 
@@ -395,7 +478,12 @@ int main()
                 else if (event.key.code == sf::Keyboard::Key::Right)
                     imageIndex = (imageIndex + 1) % imageFilenames.size();
                 // get image filename
+#if USE_STB_IMAGE
+                const auto& imageFilename = imageFilenames[texs[imageIndex].first];
+#elif !USE_STB_IMAGE && !USE_SFML
                 const auto& imageFilename = imageFilenames[imgData[imageIndex].first];
+#endif
+#if !USE_SFML
                 // set it as the window title 
                 window.setTitle(imageFilename);
                 // ... and load the appropriate texture, and put it in the sprite
@@ -405,6 +493,36 @@ int main()
                     sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
                 }
                 std::cout << "Image index = " << imageIndex << std::endl;
+#else
+                // set it as the window title 
+                window.setTitle("image");
+                // ... and load the appropriate texture, and put it in the sprite
+                sprite = sf::Sprite(texs[imageIndex].first);
+                sprite.setScale(ScaleFromDimensions(texs[imageIndex].first.getSize(), gameWidth, gameHeight));
+                std::cout << "Image index = " << imageIndex << std::endl;
+#endif // !USE_SFML
+
+            }
+#else
+#if USE_STRUCT
+            if (event.type == sf::Event::KeyPressed && dataRetrieved && imagesSprited)
+            {
+                // adjust the image index
+                if (event.key.code == sf::Keyboard::Key::Left)
+                    imageIndex = (imageIndex + Images.size() - 1) % Images.size();
+                else if (event.key.code == sf::Keyboard::Key::Right)
+                    imageIndex = (imageIndex + 1) % Images.size();
+
+                window.setTitle(Images[imageIndex].fileLocation);
+                if (Images[imageIndex].txrReady)
+                {
+                    sprite = sf::Sprite(Images[imageIndex].Texture);
+                }
+                else
+                {
+                    sprite = placeholderSprite;
+                }
+                sprite.setScale(ScaleFromDimensions(placeholderTexture.getSize(), gameWidth, gameHeight));
             }
 #else
             if (event.type == sf::Event::KeyPressed && dataRetrieved && imagesSprited)
@@ -417,8 +535,9 @@ int main()
                 
                 window.setTitle(imageFilenames[imgData[imageIndex].first]);
                 sprite = sf::Sprite(imgSprites[imgData[imageIndex].first]);
-                sprite.setScale(ScaleFromDimensions(texture.getSize(), gameWidth, gameHeight));
+                sprite.setScale(ScaleFromDimensions(imgSprites[imgData[imageIndex].first].getSize(), gameWidth, gameHeight));
             }
+#endif
 #endif // !USE_TEXTURE_THREAD
         }
 
