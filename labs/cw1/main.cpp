@@ -270,7 +270,7 @@ int main()
 
     sf::Clock toMainTimer; //   Use to get time until main window loop executes
 
-    const char* image_folder{ "./unsorted" }; // hardcoded image folder
+    const char* image_folder{ "./test_imgs_1" }; // hardcoded image folder
 
     auto threadCount{ std::thread::hardware_concurrency() };
 
@@ -282,7 +282,7 @@ int main()
 
     std::vector<std::pair<sf::Texture, double>> texs(fileCount);
 #if USE_SFML_OMP
-#pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(static) // #TODO: test performance here
+#pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(dynamic) // #TODO: test performance here
 #endif
     for (int i = 0; i < fileCount; i++)
     {
