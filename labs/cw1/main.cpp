@@ -29,6 +29,7 @@ namespace fs = std::filesystem;
 #define THREAD_OVRHD (USE_PROCESSOR_THREAD + USE_TEXTURE_THREAD)
 #define USE_STRUCT 1
 
+//  Struct to handle processed images when using struct vector configuration
 struct ProcessedImage {
     int ID{ 0 };
     float HSV_Value{ 0.0f };
@@ -37,6 +38,7 @@ struct ProcessedImage {
     bool txrReady{ false };
 };
 
+//  Method provided from initial materials to scale texture
 sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidth, int screenHeight)
 {
     float scaleX = screenWidth / float(textureSize.x);
@@ -45,6 +47,7 @@ sf::Vector2f ScaleFromDimensions(const sf::Vector2u& textureSize, int screenWidt
     return { scale, scale };
 }
 
+//  Method to calculate HSV value of an image in SFML configuration
 const double getImageHSV(const sf::Texture tex)
 {
     double h{ 0.0 }, s{ 0.0 }, v{ 0.0 };
@@ -116,7 +119,8 @@ const double getImageHSV(const sf::Texture tex)
     return 0;
 }
 
-const double getImageHSV_stb(const sf::Vector3f data)
+//  Method to calculate HSV value of a pixel in STB configuration
+const double GetPixelHue(const sf::Vector3f data)
 {
     double h{ 0 };
     auto cmax = std::max(std::max(data.x, data.y), data.z);
@@ -150,6 +154,7 @@ const double getImageHSV_stb(const sf::Vector3f data)
     return h;
 }
 
+//  Parent funciton for getting median hue value in STB configuration
 const double RetrieveImageHSV(const uint8_t* imgdata, const int width, const int height, const int dim)
 {
     std::vector<double> hueValues(width * height);
@@ -167,11 +172,10 @@ const double RetrieveImageHSV(const uint8_t* imgdata, const int width, const int
                 float r = imgdata[o * dim] / 255.0f;
                 float g = imgdata[o * dim + 1] / 255.0f;
                 float b = imgdata[o * dim + 2] / 255.0f;
-                hueValues[o] = getImageHSV_stb(sf::Vector3f(r, g, b));
+                hueValues[o] = GetPixelHue(sf::Vector3f(r, g, b));
             }
-            else if (dim == 1)
+            else
             {
-                //values[o] = imgdata[o] / 255.0f;
                 throw std::errc::no_such_process;
                 hueValues[o] = -1;
             }
@@ -181,34 +185,38 @@ const double RetrieveImageHSV(const uint8_t* imgdata, const int width, const int
     std::sort(hueValues.begin(), hueValues.end());
     if ((int)hueValues.size() % 2 == 0)
     {
-        median = (hueValues[(int)hueValues.size() / 2] + hueValues[((int)hueValues.size() / 2) + 1]) / 2;
+        median = (hueValues[(int)hueValues.size() / 2.0] + hueValues[((int)hueValues.size() / 2.0) + 1.0]) / 2.0;
     }
     else
     {
-        median = hueValues[((int)hueValues.size() + 1) / 2];
+        median = hueValues[((int)hueValues.size() + 1.0) / 2.0];
     }
     auto mid_drv{ median / 360.f };
     double integ{ 0.0 };
     double frac = modf(mid_drv, &integ);
-    auto temperature = frac * (mid_drv + (1 / 6));
+    auto temperature = frac * (mid_drv + (1.0 / 6.0));
     return temperature;
 }
 
+//  Comparison function for use in std::sort when using SFML configuration
 const bool isHSVGreater(std::pair<sf::Texture, float> lhs, std::pair<sf::Texture, float> rhs)
 {
     return lhs.second < rhs.second;
 }
 
-const bool isHSVGreater_ver2(std::pair<int, float> lhs, std::pair<int, float> rhs)
+//  Comparison function for use in std::sort when using STB configuration without struct config
+const bool isHSVGreater_stb(std::pair<int, float> lhs, std::pair<int, float> rhs)
 {
     return lhs.second < rhs.second;
 }
 
-const bool isHSVGreater_ver3(ProcessedImage lhs, ProcessedImage rhs)
+//  Comparison function for use in std::srot when using STB configuration with struct config
+const bool isHSVGreater_struct(ProcessedImage lhs, ProcessedImage rhs)
 {
     return lhs.HSV_Value < rhs.HSV_Value;
 }
 
+//  Gets the image file names for all configurations when not using the struct
 void GetImageFilenames(const char* folder, std::vector<std::string> *output)
 {
     for (auto& p : fs::directory_iterator(folder))
@@ -218,6 +226,7 @@ void GetImageFilenames(const char* folder, std::vector<std::string> *output)
     }
 }
 
+//  Gets all the image filenames when using struct
 void GetImageFilenamesForStruct(const char* folder, std::vector<ProcessedImage>* output)
 {
     int IDs{ 0 };
@@ -230,6 +239,7 @@ void GetImageFilenamesForStruct(const char* folder, std::vector<ProcessedImage>*
     }
 }
 
+//  Loads images to an sf::Texture vector from the file name vector
 void LoadImagesToVector(const std::vector<std::string> fileNames, std::vector<sf::Texture> *output)
 {
     for (auto n : fileNames)
@@ -241,6 +251,7 @@ void LoadImagesToVector(const std::vector<std::string> fileNames, std::vector<sf
     }
 }
 
+//  Loads images into the struct vector from the previously stored file locations
 void LoadImagesToStructuredVector(std::vector<ProcessedImage>* output)
 {
     for (auto& n : *output)
@@ -250,17 +261,18 @@ void LoadImagesToStructuredVector(std::vector<ProcessedImage>* output)
     }
 }
 
+//  main thread loop
 int main()
 {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
-    sf::Clock toMainTimer;
+    sf::Clock toMainTimer; //   Use to get time until main window loop executes
 
-    const char* image_folder{ "./unsorted" };
+    const char* image_folder{ "./unsorted" }; // hardcoded image folder
 
     auto threadCount{ std::thread::hardware_concurrency() };
 
-#if USE_SFML
+#if USE_SFML    // Linear processing method pre-window using SFML
     sf::Clock timer;
     std::vector<std::string> imageFilenames(0);
     GetImageFilenames(image_folder, &imageFilenames);
@@ -285,7 +297,7 @@ int main()
     auto time{ timer.getElapsedTime().asMilliseconds() };
 #endif // USE_SFML
 
-#if USE_STB_IMAGE
+#if USE_STB_IMAGE   //  Linear processing method pre-window using STB_image
     sf::Clock timer;
     std::vector<std::string> imageFilenames(0);
     GetImageFilenames(image_folder, &imageFilenames);
@@ -301,23 +313,24 @@ int main()
         texs[i].second = RetrieveImageHSV(imageData, w, h, n);
         stbi_image_free(imageData);
     }
-    std::sort(texs.begin(), texs.end(), isHSVGreater_ver2);
+    std::sort(texs.begin(), texs.end(), isHSVGreater_stb);
     auto time{ timer.getElapsedTime().asMilliseconds() };
 #endif // USE_STB_IMAGE
 
 
-    // Define some constants
+    // Constants
     const float pi{ 3.14159f };
     const int gameWidth{ 800 };
     const int gameHeight{ 600 };
 
+    //  Image index, updating on key press
     int imageIndex{ 0 };
 
-#if USE_PROCESSOR_THREAD
+#if USE_PROCESSOR_THREAD // Defines string vector that is later resized when using background processor thread
     std::vector<std::string> imageFilenames(0);
-#if USE_STRUCT
+#if USE_STRUCT  //  Defines processed image struct vector when using struct configuration
     std::vector<ProcessedImage> Images(0);
-#elif !USE_STB_IMAGE && !USE_SFML
+#elif !USE_STB_IMAGE && !USE_SFML   //  else use separate value and texture vectors
     std::vector<std::pair<int, float>> imgData(0);
     std::vector<sf::Texture> imgSprites(0);
 #endif // USE_STRUCT
@@ -329,7 +342,7 @@ int main()
     window.setVerticalSyncEnabled(true);
 
     // Load an image to begin with
-#if !USE_TEXTURE_THREAD
+#if !USE_TEXTURE_THREAD //  Creates extra texture variable for certain configs
     sf::Texture texture;
 #endif
     sf::Texture placeholderTexture;
@@ -389,7 +402,7 @@ int main()
                     Images[i].HSV_Value = RetrieveImageHSV(rawData, w, h, n);
                     stbi_image_free(rawData);
                 }
-                std::sort(Images.begin(), Images.end(), isHSVGreater_ver3);
+                std::sort(Images.begin(), Images.end(), isHSVGreater_struct);
                 dataRetrieved = true;
 #else
                 for (int i{ 0 }; i < (int)imgData.size(); ++i)
@@ -400,7 +413,7 @@ int main()
                     imgData[i].second = RetrieveImageHSV(rawData, w, h, n);
                     stbi_image_free(rawData);
                 }
-                std::sort(imgData.begin(), imgData.end(), isHSVGreater_ver2);
+                std::sort(imgData.begin(), imgData.end(), isHSVGreater_stb);
                 dataRetrieved = true;
 #endif // USE_STRUCT
 
