@@ -20,14 +20,16 @@
 namespace fs = std::filesystem;
 
 #define USE_SFML 0
+#define USE_SFML_OMP 0
 #define USE_STB_IMAGE 0
-#define USE_PROCESSOR_THREAD 1
-#define SINGLE_THREAD_SPAWN_WORKERS 1
-#define FAKE_DELAY 0
-#define USE_OMP_HSV 0
-#define USE_TEXTURE_THREAD 1
-#define THREAD_OVRHD (USE_PROCESSOR_THREAD + USE_TEXTURE_THREAD)
-#define USE_STRUCT 1
+#define USE_STB_IMAGE_OMP 0
+#define USE_PROCESSOR_THREAD 1 // not compatible with SFML or STB configs
+#define SINGLE_THREAD_SPAWN_WORKERS 1   // compatible with both thread configs and struct
+#define FAKE_DELAY 0    //  used for testing purposes
+#define USE_OMP_HSV 0   //  experimental
+#define USE_TEXTURE_THREAD 1    //  not compatible with configs above use processor thread
+#define THREAD_OVRHD (USE_PROCESSOR_THREAD + USE_TEXTURE_THREAD)    //  shortcut for updating physical thread overhead
+#define USE_STRUCT 1    // not compatible with SFML or STB configs
 
 //  Struct to handle processed images when using struct vector configuration
 struct ProcessedImage {
@@ -279,7 +281,9 @@ int main()
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
 
     std::vector<std::pair<sf::Texture, double>> texs(fileCount);
+#if USE_SFML_OMP
 #pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(static) // #TODO: test performance here
+#endif
     for (int i = 0; i < fileCount; i++)
     {
         if (texs[i].first.loadFromFile(imageFilenames[i]))
@@ -294,7 +298,8 @@ int main()
     }
 
     std::sort(texs.begin(), texs.end(), isHSVGreater);
-    auto time{ timer.getElapsedTime().asMilliseconds() };
+    auto processingTime{ timer.getElapsedTime().asMilliseconds() };
+    std::cout << processingTime << "ms to process all images" << std::endl;
 #endif // USE_SFML
 
 #if USE_STB_IMAGE   //  Linear processing method pre-window using STB_image
@@ -304,7 +309,9 @@ int main()
     int fileCount{ (int)imageFilenames.size() }; // will be made irrelevant soon
 
     std::vector<std::pair<int, float>> texs(fileCount);
+#if USE_STB_IMAGE_OMP
 #pragma omp parallel for num_threads(threadCount - THREAD_OVRHD) schedule(dynamic)
+#endif
     for (int i{ 0 }; i < fileCount; ++i)
     {
         int w{ 0 }, h{ 0 }, n{ 0 };
@@ -314,7 +321,8 @@ int main()
         stbi_image_free(imageData);
     }
     std::sort(texs.begin(), texs.end(), isHSVGreater_stb);
-    auto time{ timer.getElapsedTime().asMilliseconds() };
+    auto processingTime{ timer.getElapsedTime().asMilliseconds() };
+    std::cout << processingTime << "ms to process all images" << std::endl;
 #endif // USE_STB_IMAGE
 
 
