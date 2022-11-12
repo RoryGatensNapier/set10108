@@ -476,6 +476,10 @@ int main()
             if ((event.type == sf::Event::Closed) ||
                ((event.type == sf::Event::KeyPressed) && (event.key.code == sf::Keyboard::Escape)))
             {
+                textureThread->~thread();
+                hsvThread->~thread();
+                textureThread.reset();
+                hsvThread.reset();
                 window.close();
                 break;
             }
