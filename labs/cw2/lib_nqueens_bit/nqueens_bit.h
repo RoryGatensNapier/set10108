@@ -3,12 +3,8 @@
 #include <cstdlib>
 #include <vector>
 
-namespace nq_bit
+namespace nqueen_solver
 {
-	class NQueen
-	{
-	public:
-		bool testValidMove(std::bitset<8> row, std::vector<std::bitset<8>> board, int rowPos);
-		void Run();
-	};
+	bool testValidMove();
+	void Run();
 }
