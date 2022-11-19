@@ -112,7 +112,6 @@ void nq_bit::Run_v2(int Queens)
 	std::vector<std::bitset<8>> board(8, 0);
 	std::vector<std::vector<std::bitset<8>>> queue;
 	std::vector<std::vector<std::bitset<8>>> solutions;
-	
 	for (int i{ 0 }; i < Queens; ++i)
 	{
 		board[i].set(i);
@@ -123,28 +122,41 @@ void nq_bit::Run_v2(int Queens)
 	{
 		queue.push_back(board);
 	}
-
+	board.~vector();
+#pragma omp parallel for num_threads(12) schedule(dynamic)
 	for (int i{0}; i < queue.size(); ++i)
 	{
-		std::vector<std::bitset<8>> board;
-		board = queue[i];
+		std::vector<std::bitset<8>> testBoard;
+		testBoard = queue[i];
 		std::bitset<8> innerTests(0);
 		std::bitset<8> rowsPassed(0);
 		for (int boardProgress{ 0 }; boardProgress < Queens; ++boardProgress)
 		{
 			for (int lookback{ 0 }; lookback < boardProgress; ++lookback)
 			{
-				innerTests[lookback] = TestValidMove64_ver3(board[boardProgress], board[lookback], boardProgress, lookback);
+				innerTests[lookback] = TestValidMove64_ver3(testBoard[boardProgress], testBoard[lookback], boardProgress, lookback);
 			}
 			rowsPassed[boardProgress] = innerTests.to_ullong() == pow(2, boardProgress)-1;
 		}
 		if (rowsPassed.to_ullong() == pow(2, Queens) - 1)
 		{
-			solutions.push_back(board);
+#pragma omp critical
+			solutions.resize(solutions.size() + 1);
+			solutions.back() = testBoard;
 		}
 	}
+	queue.~vector();
 
 	solutions = solutions;
+
+	for (auto s : solutions)
+	{
+		for (auto i : s)
+		{
+			std::cout << i.to_string().c_str() << std::endl;
+		}
+		std::cout << std::endl;
+	}
 
 
 	//auto permutations = CalculateBoardPermutation(Queens);
