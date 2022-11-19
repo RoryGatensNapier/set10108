@@ -64,55 +64,103 @@ bool nq_bit::TestValidMove64_ver2(std::bitset<8> row, std::bitset<64> board, int
 	return leftDiagonalSafe && rightDiagonalSafe && columnSafe;
 }
 
-void nq_bit::Run_v2()
+bool TestValidMove64_ver3(std::bitset<8> rowToTest, std::bitset<8> rowToCheckAgainst, int posToTest, int posToCheckAgainst)
 {
-	std::queue<std::bitset<64>> queue;
+	bool leftDiagonalSafe = rowToTest.to_ulong() != (rowToCheckAgainst << (posToTest - posToCheckAgainst)).to_ulong();
+	bool rightDiagonalSafe = rowToTest.to_ulong() != (rowToCheckAgainst >> (posToTest - posToCheckAgainst)).to_ulong();
+	bool columnSafe = rowToTest.to_ulong() != rowToCheckAgainst.to_ulong();
 
-#pragma omp parallel num_threads(8) shared(queue)
+	return leftDiagonalSafe && rightDiagonalSafe && columnSafe;
+}
+
+double CalculateBoardPermutation(int queens)
+{
+	int boardSize{ queens * queens };
+	double combinations{ 1 };
+	double boardMinusQueensFac{ 1 };
+	double qFac{ 1 };
+	double permutations{ 1 };
+	for (int f{ boardSize }; f > 0; --f)
 	{
-		std::bitset<64> board(0);
-		board.set(omp_get_thread_num());
-		std::bitset<8> workingRow(1);
-		int curRow{ 0 };
+		combinations *= f;
+	}
+	for (int h{ boardSize - queens }; h > 0; --h)
+	{
+		boardMinusQueensFac *= h;
+	}
+	for (int h{ queens }; h > 0; --h)
+	{
+		qFac *= h;
+	}
+	permutations = combinations / (boardMinusQueensFac * qFac);
+	return permutations;
+}
 
-#pragma omp critical
-		queue.push(board);
+bool BitsetCompare(std::bitset<8> bit1, std::bitset<8> bit2)
+{
+	return bit1.to_ullong() < bit2.to_ullong();
+}
 
-#pragma omp barrier
+void nq_bit::Run_v2(int Queens)
+{
+	/*double queensFactorial{ 1 };
+	for (int i{ Queens }; i > 0; --i)
+	{
+		queensFactorial *= i;
+	}*/
 
-		while (!queue.empty())
+	std::vector<std::bitset<8>> board(8, 0);
+	std::vector<std::vector<std::bitset<8>>> queue;
+	std::vector<std::vector<std::bitset<8>>> solutions;
+	
+	for (int i{ 0 }; i < Queens; ++i)
+	{
+		board[i].set(i);
+	}
+
+	queue.push_back(board);
+	while (std::next_permutation(board.begin(), board.end(), BitsetCompare))
+	{
+		queue.push_back(board);
+	}
+
+	for (int i{0}; i < queue.size(); ++i)
+	{
+		std::vector<std::bitset<8>> board;
+		board = queue[i];
+		std::bitset<8> innerTests(0);
+		std::bitset<8> rowsPassed(0);
+		for (int boardProgress{ 0 }; boardProgress < Queens; ++boardProgress)
 		{
-			if (workingRow.to_ulong() == 128)
+			for (int lookback{ 0 }; lookback < boardProgress; ++lookback)
 			{
-#pragma omp critical
-				{
-					board = queue.front();
-					queue.pop();
-					workingRow = 1;
-					++curRow;
-				}
+				innerTests[lookback] = TestValidMove64_ver3(board[boardProgress], board[lookback], boardProgress, lookback);
 			}
-
-			bool solutionCheck{ true };
-
-#pragma omp for
-			for (int i{ 0 }; i < curRow; ++i)
-			{
-				solutionCheck = solutionCheck && TestValidMove64_ver2(workingRow, board, curRow, i);
-			}
-
-			if (solutionCheck)
-			{
-				auto outBoard = board;
-				outBoard.set(log2(workingRow.to_ulong()) + (8 * curRow));
-#pragma omp critical
-				{
-					queue.push(outBoard);
-				}
-			}
-			workingRow <<= 1;
+			rowsPassed[boardProgress] = innerTests.to_ullong() == pow(2, boardProgress)-1;
+		}
+		if (rowsPassed.to_ullong() == pow(2, Queens) - 1)
+		{
+			solutions.push_back(board);
 		}
 	}
+
+	solutions = solutions;
+
+
+	//auto permutations = CalculateBoardPermutation(Queens);
+	//std::vector<bool> board(Queens * Queens);
+	//std::queue<std::vector<bool>> queue;
+	//for (int i{ 0 }; i < Queens; ++i)
+	//{
+	//	board[i * Queens] = true;
+	//}
+	//queue.push(board);
+	//for (int i{0}; i < permutations; ++i)
+	//{		
+	//	std::next_permutation(board.begin(), board.end());
+	//	//queue.push(board);
+	//}
+	//queue = queue;
 }
 
 void nq_bit::Run()
@@ -127,12 +175,11 @@ void nq_bit::Run()
 		board.set(omp_get_thread_num());
 		std::bitset<8> localTests(1);
 
-		while (boardSet)
+		while (rowToCheck <= 6)
 		{
 			std::vector<std::pair<std::bitset<64>, int>> _q(0);
 			localTests = 1;
 
-//#pragma omp for
 			for (int i{ 0 }; i < 7; ++i)
 			{
 				if (testValidMove64(localTests, board, rowToCheck) && log2(localTests.to_ulong()) + (8 * rowToCheck) < 64)
@@ -162,15 +209,6 @@ void nq_bit::Run()
 				rowToCheck = queue.front().second;
 				queue.pop();
 			}
-
-			if (rowToCheck > 7)
-			{
-				boardSet = false;
-			}
-
-			std::cout << queue.size() << std::endl;
 		}
 	}
-
-	queue = queue;
 }

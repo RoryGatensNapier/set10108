@@ -99,7 +99,7 @@ void calculateAllSolutions(int N, bool print)
 
 int main(int argc, char** argv)
 {
-    nq_bit::Run();
+    nq_bit::Run_v2(8);
     for (int N = 4; N < 13; ++N)
         calculateAllSolutions(N, false);
 }
