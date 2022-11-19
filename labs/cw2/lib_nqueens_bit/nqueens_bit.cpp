@@ -1,3 +1,4 @@
+#include <chrono>
 #include <math.h>
 #include <omp.h>
 #include <queue>
@@ -117,13 +118,17 @@ void nq_bit::Run_v2(int Queens)
 		board[i].set(i);
 	}
 
-	queue.push_back(board);
+	queue.resize(queue.size() + 1);
+	queue.back() = board;
 	while (std::next_permutation(board.begin(), board.end(), BitsetCompare))
 	{
-		queue.push_back(board);
+		queue.resize(queue.size() + 1);
+		queue.back() = board;
 	}
 	board.~vector();
-#pragma omp parallel for num_threads(12) schedule(dynamic)
+	int threadCount = omp_get_max_threads();
+	auto time = std::chrono::high_resolution_clock::now();
+#pragma omp parallel for num_threads(threadCount) schedule(dynamic)
 	for (int i{0}; i < queue.size(); ++i)
 	{
 		std::vector<std::bitset<8>> testBoard;
@@ -145,18 +150,16 @@ void nq_bit::Run_v2(int Queens)
 			solutions.back() = testBoard;
 		}
 	}
+	auto time2 = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time);
 	queue.~vector();
-
-	solutions = solutions;
-
-	for (auto s : solutions)
+	/*for (auto s : solutions)
 	{
 		for (auto i : s)
 		{
 			std::cout << i.to_string().c_str() << std::endl;
 		}
 		std::cout << std::endl;
-	}
+	}*/
 
 
 	//auto permutations = CalculateBoardPermutation(Queens);
