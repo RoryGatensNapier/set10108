@@ -146,8 +146,10 @@ void nq_bit::Run_v2(int Queens)
 		if (rowsPassed.to_ullong() == pow(2, Queens) - 1)
 		{
 #pragma omp critical
-			solutions.resize(solutions.size() + 1);
-			solutions.back() = testBoard;
+			{
+				solutions.resize(solutions.size() + 1);
+				solutions.back() = testBoard;
+			}
 		}
 	}
 	auto time2 = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time);
