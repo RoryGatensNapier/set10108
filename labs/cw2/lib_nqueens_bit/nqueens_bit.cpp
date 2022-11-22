@@ -36,8 +36,9 @@ std::vector<int> generateBoards(int NumberOfQueens)
 
 void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 {
-	unsigned long long dataSize = sizeof(int) * h_Boards.size();
-	std::vector<int> out(h_Boards.size()/NumberOfQueens, false);
+	unsigned long long d_Boards_DataSize = sizeof(int) * h_Boards.size();
+	std::vector<int> out(h_Boards.size() / NumberOfQueens, 0);
+	unsigned long long d_Tests_DataSize = sizeof(int) * out.size();
 	try
 	{
 		std::vector<cl::Platform> cl_Platforms;
@@ -53,10 +54,10 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 
 		cl::CommandQueue cl_Queue(cl_Context, cl_Devices[0]);
 
-		cl::Buffer d_intVecBuf_Boards(cl_Context, CL_MEM_READ_ONLY, dataSize);
-		cl::Buffer d_intVec_Out(cl_Context, CL_MEM_WRITE_ONLY, dataSize);
+		cl::Buffer d_intVecBuf_Boards(cl_Context, CL_MEM_READ_ONLY, d_Boards_DataSize);
+		cl::Buffer d_intVec_Out(cl_Context, CL_MEM_WRITE_ONLY, d_Tests_DataSize);
 
-		cl_Queue.enqueueWriteBuffer(d_intVecBuf_Boards, CL_TRUE, 0, dataSize, h_Boards.data());
+		cl_Queue.enqueueWriteBuffer(d_intVecBuf_Boards, CL_TRUE, 0, d_Boards_DataSize, h_Boards.data());
 
 		std::ifstream cl_File("nqueens_solver.cl");
 		std::string cl_Kernel_Code(std::istreambuf_iterator<char>(cl_File), (std::istreambuf_iterator<char>()));
@@ -71,16 +72,18 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		kernel_nQueens.setArg(0, d_intVecBuf_Boards);
 		kernel_nQueens.setArg(1, d_intVec_Out);
 
-		cl::NDRange global(h_Boards.size());
+		cl::NDRange global(out.size());
 
 		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global);
 
-		cl_Queue.enqueueReadBuffer(d_intVec_Out, CL_TRUE, 0, dataSize, out.data());
+		cl_Queue.enqueueReadBuffer(d_intVec_Out, CL_TRUE, 0, d_Tests_DataSize, out.data());
 
-		/*for (auto a : out)
+		std::sort(out.begin(), out.end());
+
+		for (auto a : out)
 		{
 			std::cout << a << std::endl;
-		}*/
+		}
 	}
 	catch (cl::Error error)
 	{
@@ -98,5 +101,4 @@ void nqueen_solver::Run(int Queens)
 	createAndRunKernel_CL(Boards, Queens);
 
 	std::cout << "beep" << std::endl;
-
 }

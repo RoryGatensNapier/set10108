@@ -1,4 +1,4 @@
 __kernel void solveBoard(__global int *Board, __global int *Validity)
 {
-	int idx = get_global_id(0);
+	Validity[get_global_id(0)] = get_group_id(0);
 }

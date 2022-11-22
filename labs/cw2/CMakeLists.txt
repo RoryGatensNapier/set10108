@@ -14,7 +14,7 @@ link_libraries(${OpenCL_LIBRARIES})
 file(GLOB_RECURSE SOURCE_FILES lib_nqueens_bit ./lib_nqueens_bit/*.cpp ./lib_nqueens_bit/*.h ./lib_nqueens_bit/*.cl)
 add_library(lib_nqueens_bit STATIC ${SOURCE_FILES})
 target_include_directories(lib_nqueens_bit INTERFACE "${CMAKE_SOURCE_DIR}/lib_nqueens_bit/")
-target_link_libraries(lib_nqueens_bit) 
+target_link_libraries(lib_nqueens_bit)
 
 configure_file(./lib_nqueens_bit/nqueens_solver.cl nqueens_solver.cl COPYONLY)
 
