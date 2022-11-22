@@ -5,6 +5,5 @@
 
 namespace nqueen_solver
 {
-	bool testValidMove();
-	void Run();
+	void Run(int Queens);
 }

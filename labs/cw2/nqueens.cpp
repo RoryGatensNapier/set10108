@@ -99,8 +99,7 @@ void calculateAllSolutions(int N, bool print)
 
 int main(int argc, char** argv)
 {
-    auto s = nq_bit::NQueen();
-    s.Run();
+    nqueen_solver::Run(8);
     for (int N = 4; N < 13; ++N)
         calculateAllSolutions(N, false);
 }
