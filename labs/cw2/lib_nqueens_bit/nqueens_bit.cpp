@@ -56,8 +56,11 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 
 		cl::Buffer d_intVecBuf_Boards(cl_Context, CL_MEM_READ_ONLY, d_Boards_DataSize);
 		cl::Buffer d_intVec_Out(cl_Context, CL_MEM_WRITE_ONLY, d_Tests_DataSize);
+		cl::Buffer d_int_NumOfQueens(cl_Context, CL_MEM_READ_ONLY, sizeof(int));
+		cl::Buffer d_intVec_localWorkspace(cl_Context, CL_MEM_READ_ONLY, sizeof(int) * NumberOfQueens);
 
 		cl_Queue.enqueueWriteBuffer(d_intVecBuf_Boards, CL_TRUE, 0, d_Boards_DataSize, h_Boards.data());
+		cl_Queue.enqueueWriteBuffer(d_int_NumOfQueens, CL_TRUE, 0, sizeof(int), &NumberOfQueens);
 
 		std::ifstream cl_File("nqueens_solver.cl");
 		std::string cl_Kernel_Code(std::istreambuf_iterator<char>(cl_File), (std::istreambuf_iterator<char>()));
@@ -71,14 +74,17 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 
 		kernel_nQueens.setArg(0, d_intVecBuf_Boards);
 		kernel_nQueens.setArg(1, d_intVec_Out);
+		kernel_nQueens.setArg(2, d_int_NumOfQueens);
+		kernel_nQueens.setArg(3, sizeof(int) * NumberOfQueens, nullptr);
 
 		cl::NDRange global(out.size());
+		/*cl::NDRange local(8);*/
 
-		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global);
+		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global/*, local*/);
 
 		cl_Queue.enqueueReadBuffer(d_intVec_Out, CL_TRUE, 0, d_Tests_DataSize, out.data());
 
-		std::sort(out.begin(), out.end());
+		//std::sort(out.begin(), out.end());
 
 		for (auto a : out)
 		{
