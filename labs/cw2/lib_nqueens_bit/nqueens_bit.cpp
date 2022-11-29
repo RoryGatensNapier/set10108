@@ -77,18 +77,18 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		kernel_nQueens.setArg(2, d_int_NumOfQueens);
 		kernel_nQueens.setArg(3, sizeof(int) * NumberOfQueens, nullptr);
 
-		cl::NDRange global(out.size());
-		/*cl::NDRange local(8);*/
+		cl::NDRange global(h_Boards.size());
+		cl::NDRange local(NumberOfQueens);
 
-		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global/*, local*/);
+		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global, local);
 
 		cl_Queue.enqueueReadBuffer(d_intVec_Out, CL_TRUE, 0, d_Tests_DataSize, out.data());
 
-		//std::sort(out.begin(), out.end());
+		std::sort(out.begin(), out.end());
 
 		for (auto a : out)
 		{
-			std::cout << a << std::endl;
+			//std::cout << a << std::endl;
 		}
 	}
 	catch (cl::Error error)
