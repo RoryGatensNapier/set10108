@@ -49,6 +49,8 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 
 		std::cout << "Found GPU: " << cl_Devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
 		std::cout << "Max Work Group Size: " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << std::endl;
+		std::cout << "Max Global Memory size: " << cl_Devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>() << std::endl;
+		std::cout << "Max Global Work Item size: " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[0] << ", " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[1] << ", " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[2] << std::endl;
 
 		cl::Context cl_Context(cl_Devices);
 
@@ -57,7 +59,6 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		cl::Buffer d_intVecBuf_Boards(cl_Context, CL_MEM_READ_ONLY, d_Boards_DataSize);
 		cl::Buffer d_intVec_Out(cl_Context, CL_MEM_WRITE_ONLY, d_Tests_DataSize);
 		cl::Buffer d_int_NumOfQueens(cl_Context, CL_MEM_READ_ONLY, sizeof(int));
-		cl::Buffer d_intVec_localWorkspace(cl_Context, CL_MEM_READ_ONLY, sizeof(int) * NumberOfQueens);
 
 		cl_Queue.enqueueWriteBuffer(d_intVecBuf_Boards, CL_TRUE, 0, d_Boards_DataSize, h_Boards.data());
 		cl_Queue.enqueueWriteBuffer(d_int_NumOfQueens, CL_TRUE, 0, sizeof(int), &NumberOfQueens);
@@ -77,19 +78,24 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		kernel_nQueens.setArg(2, d_int_NumOfQueens);
 		kernel_nQueens.setArg(3, sizeof(int) * NumberOfQueens, nullptr);
 
-		cl::NDRange global(out.size());
-		/*cl::NDRange local(8);*/
+		cl::NDRange global(h_Boards.size());
+		cl::NDRange local(NumberOfQueens);
 
-		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global/*, local*/);
+		cl_Queue.enqueueNDRangeKernel(kernel_nQueens, cl::NullRange, global, local);
 
 		cl_Queue.enqueueReadBuffer(d_intVec_Out, CL_TRUE, 0, d_Tests_DataSize, out.data());
 
-		//std::sort(out.begin(), out.end());
-
+		std::sort(out.begin(), out.end());
+		int counter = 0;
 		for (auto a : out)
 		{
-			std::cout << a << std::endl;
+			//std::cout << a << std::endl;
+			if (a == NumberOfQueens * (NumberOfQueens - 1))
+			{
+				++counter;
+			}
 		}
+		std::cout << "\r\nNumber of solutions for " << NumberOfQueens << " is " << counter << std::endl << std::endl;
 	}
 	catch (cl::Error error)
 	{
@@ -106,5 +112,5 @@ void nqueen_solver::Run(int Queens)
 
 	createAndRunKernel_CL(Boards, Queens);
 
-	std::cout << "beep" << std::endl;
+	//std::cout << "beep" << std::endl;
 }
