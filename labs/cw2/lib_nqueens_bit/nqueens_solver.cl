@@ -28,7 +28,7 @@ __kernel void solveBoard(__global int *BoardData, __global int *Validity, __glob
 		//printf("isnEq_L = %d / isnEq_R = %d / isnEq = %d\r\n", isnEq_L, isnEq_R, isnEq);
 		totalTests += isnEq;
 	}
-	atomic_add(&wgTests, totalTests);
+	atomic_fetch_add(&wgTests, totalTests);
 	//printf("totalTests = %d\r\n", totalTests);
 	if (WG_idx == 0)
 	{

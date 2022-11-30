@@ -1,6 +1,7 @@
 #define __CL_ENABLE_EXCEPTIONS
 
 #include <algorithm>
+#include <chrono>
 #include <CL/cl.hpp>
 #include <cstdlib>
 #include <iostream>
@@ -48,6 +49,7 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		cl_Platforms[0].getDevices(CL_DEVICE_TYPE_GPU, &cl_Devices);
 
 		std::cout << "Found GPU: " << cl_Devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
+		std::cout << "OpenGL Version: " << cl_Devices[0].getInfo<CL_DEVICE_VERSION>() << std::endl;
 		std::cout << "Max Work Group Size: " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << std::endl;
 		std::cout << "Max Global Memory size: " << cl_Devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>() << std::endl;
 		std::cout << "Max Global Work Item size: " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[0] << ", " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[1] << ", " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[2] << std::endl;
@@ -95,7 +97,7 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 				++counter;
 			}
 		}
-		std::cout << "\r\nNumber of solutions for " << NumberOfQueens << " is " << counter << std::endl << std::endl;
+		std::cout << "\r\nNumber of solutions for " << NumberOfQueens << " is " << counter << std::endl;
 	}
 	catch (cl::Error error)
 	{
@@ -109,8 +111,11 @@ void nqueen_solver::Run(int Queens)
 	Boards = generateBoards(Queens);
 	//std::unique_ptr<std::thread> genBoards(std::make_unique<std::thread>([&] { Boards = generateBoards(Queens); }));
 	//genBoards->join();
-
+	std::chrono::high_resolution_clock t;
+	auto timePreKernel = t.now();
 	createAndRunKernel_CL(Boards, Queens);
-
+	auto timePostKernel = t.now();
+	auto tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
+	std::printf("Kernel executed in %lld ms\r\n", tTime);
 	//std::cout << "beep" << std::endl;
 }
