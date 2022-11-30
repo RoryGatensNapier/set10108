@@ -74,6 +74,7 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		cl_Program.build(cl_Devices);
 
 		cl::Kernel kernel_nQueens(cl_Program, "solveBoard");
+		std::cout << "Preferred Kernel work group size: " << kernel_nQueens.getWorkGroupInfo<CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE>(cl_Devices[0]) << std::endl;
 
 		kernel_nQueens.setArg(0, d_intVecBuf_Boards);
 		kernel_nQueens.setArg(1, d_intVec_Out);
@@ -91,7 +92,6 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		int counter = 0;
 		for (auto a : out)
 		{
-			//std::cout << a << std::endl;
 			if (a == NumberOfQueens * (NumberOfQueens - 1))
 			{
 				++counter;
@@ -109,13 +109,10 @@ void nqueen_solver::Run(int Queens)
 {
 	std::vector<int> Boards(0);
 	Boards = generateBoards(Queens);
-	//std::unique_ptr<std::thread> genBoards(std::make_unique<std::thread>([&] { Boards = generateBoards(Queens); }));
-	//genBoards->join();
 	std::chrono::high_resolution_clock t;
 	auto timePreKernel = t.now();
 	createAndRunKernel_CL(Boards, Queens);
 	auto timePostKernel = t.now();
 	auto tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
 	std::printf("Kernel executed in %lld ms\r\n", tTime);
-	//std::cout << "beep" << std::endl;
 }
