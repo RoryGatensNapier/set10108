@@ -88,7 +88,6 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 
 		cl_Queue.enqueueReadBuffer(d_intVec_Out, CL_TRUE, 0, d_Tests_DataSize, out.data());
 
-		std::sort(out.begin(), out.end());
 		int counter = 0;
 		for (auto a : out)
 		{
