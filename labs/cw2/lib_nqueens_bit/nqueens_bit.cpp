@@ -35,6 +35,43 @@ std::vector<int> generateBoards(int NumberOfQueens)
 	return out;
 }
 
+void runOMP(std::vector<int>& h_Boards, int NumberOfQueens)
+{
+	int threadCount = omp_get_max_threads();
+	int counter{ 0 };
+
+#pragma omp parallel for num_threads(threadCount) shared(counter)
+	for (int i{0}; i < h_Boards.size() / NumberOfQueens; ++i)
+	{
+		int idx = i;
+		int tests = 0;
+		std::vector<int> workBoard(NumberOfQueens);
+		for (int row{ 0 }; row < NumberOfQueens; ++row)
+		{
+			int cell = (idx * NumberOfQueens) + row;
+			workBoard[row] = h_Boards[cell];
+		}
+		for (int row{ 0 }; row < NumberOfQueens; ++row)
+		{
+			int testVal = workBoard[row];
+			for (int testRow{ 0 }; testRow < NumberOfQueens; ++testRow)
+			{
+				int Shift = abs(row - testRow);
+				bool testRShift = (workBoard[row] >> Shift) != workBoard[testRow];
+				bool testLShift = (workBoard[row] << Shift) != workBoard[testRow];
+				tests += (testLShift && testRShift);
+			}
+		}
+		if (tests == NumberOfQueens * (NumberOfQueens - 1))
+		{
+			printf("tests on %d ended with %d complete\r\n", idx, tests);
+#pragma omp critical
+			++counter;
+		}
+	}
+	printf("Solutions = %d\r\n", counter);
+}
+
 void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 {
 	unsigned long long d_Boards_DataSize = sizeof(int) * h_Boards.size();
@@ -110,7 +147,8 @@ void nqueen_solver::Run(int Queens)
 	Boards = generateBoards(Queens);
 	std::chrono::high_resolution_clock t;
 	auto timePreKernel = t.now();
-	createAndRunKernel_CL(Boards, Queens);
+	//createAndRunKernel_CL(Boards, Queens);
+	runOMP(Boards, Queens);
 	auto timePostKernel = t.now();
 	auto tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
 	std::printf("Kernel executed in %lld ms\r\n", tTime);
