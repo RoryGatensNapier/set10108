@@ -5,5 +5,5 @@
 
 namespace nqueen_solver
 {
-	void Run(int Queens);
+	void Run(int Queens, int Runs);
 }

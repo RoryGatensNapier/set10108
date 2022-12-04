@@ -11,6 +11,8 @@
 #include "nqueens_bit.h"
 #include <fstream>
 
+#define OPENCL_DEBUG 0
+
 std::vector<int> generateBoards(int NumberOfQueens)
 {
 	std::vector<int> start(NumberOfQueens);
@@ -40,7 +42,7 @@ void runOMP(std::vector<int>& h_Boards, int NumberOfQueens)
 	int threadCount = omp_get_max_threads();
 	int counter{ 0 };
 
-#pragma omp parallel for num_threads(threadCount) shared(counter)
+#pragma omp parallel for num_threads(threadCount) schedule(runtime) shared(counter)
 	for (int i{0}; i < h_Boards.size() / NumberOfQueens; ++i)
 	{
 		int idx = i;
@@ -64,12 +66,11 @@ void runOMP(std::vector<int>& h_Boards, int NumberOfQueens)
 		}
 		if (tests == NumberOfQueens * (NumberOfQueens - 1))
 		{
-			printf("tests on %d ended with %d complete\r\n", idx, tests);
 #pragma omp critical
 			++counter;
 		}
 	}
-	printf("Solutions = %d\r\n", counter);
+	//std::cout << "\r\nNumber of solutions for " << NumberOfQueens << " is " << counter << std::endl;
 }
 
 void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
@@ -85,12 +86,13 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		std::vector<cl::Device> cl_Devices;
 		cl_Platforms[0].getDevices(CL_DEVICE_TYPE_GPU, &cl_Devices);
 
+#if OPENCL_DEBUG
 		std::cout << "Found GPU: " << cl_Devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
 		std::cout << "OpenGL Version: " << cl_Devices[0].getInfo<CL_DEVICE_VERSION>() << std::endl;
 		std::cout << "Max Work Group Size: " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << std::endl;
 		std::cout << "Max Global Memory size: " << cl_Devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>() << std::endl;
 		std::cout << "Max Global Work Item size: " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[0] << ", " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[1] << ", " << cl_Devices[0].getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[2] << std::endl;
-
+#endif
 		cl::Context cl_Context(cl_Devices);
 
 		cl::CommandQueue cl_Queue(cl_Context, cl_Devices[0]);
@@ -111,7 +113,9 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 		cl_Program.build(cl_Devices);
 
 		cl::Kernel kernel_nQueens(cl_Program, "solveBoard");
+#if OPENCL_DEBUG
 		std::cout << "Preferred Kernel work group size: " << kernel_nQueens.getWorkGroupInfo<CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE>(cl_Devices[0]) << std::endl;
+#endif // OPENCL_DEBUG
 
 		kernel_nQueens.setArg(0, d_intVecBuf_Boards);
 		kernel_nQueens.setArg(1, d_intVec_Out);
@@ -133,7 +137,7 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 				++counter;
 			}
 		}
-		std::cout << "\r\nNumber of solutions for " << NumberOfQueens << " is " << counter << std::endl;
+		///std::cout << "\r\nNumber of solutions for " << NumberOfQueens << " is " << counter << std::endl;
 	}
 	catch (cl::Error error)
 	{
@@ -141,15 +145,46 @@ void createAndRunKernel_CL(std::vector<int> &h_Boards, int NumberOfQueens)
 	}
 }
 
-void nqueen_solver::Run(int Queens)
+void nqueen_solver::Run(int Queens, int Runs)
 {
 	std::vector<int> Boards(0);
 	Boards = generateBoards(Queens);
+
+	std::ofstream resultsFile;
+
+	std::string file = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/CW2_Testing/Parallel/";
+	std::string fileName = "Results-Queens";
+	fileName.append(std::to_string(Queens));
+	fileName.append("-Runs");
+	fileName.append(std::to_string(Runs));
+	fileName.append(".csv");
+	file.append(fileName);
+	resultsFile.open(file);
+	resultsFile << "--OpenCL Results-- | Queen count =" << Queens << std::endl;
+
 	std::chrono::high_resolution_clock t;
-	auto timePreKernel = t.now();
-	//createAndRunKernel_CL(Boards, Queens);
-	runOMP(Boards, Queens);
-	auto timePostKernel = t.now();
-	auto tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
-	std::printf("Kernel executed in %lld ms\r\n", tTime);
+	std::chrono::steady_clock::time_point timePreKernel;
+	std::chrono::steady_clock::time_point timePostKernel;
+	long long tTime;
+
+	for (int x{0}; x < Runs; ++x)
+	{
+		timePreKernel = t.now();
+		createAndRunKernel_CL(Boards, Queens);
+		timePostKernel = t.now();
+		tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
+		resultsFile << tTime << ",";
+	}
+	resultsFile << "\r\n--OpenMP implementation-- | Queen count =" << Queens << std::endl;
+
+	for (int x{ 0 }; x < Runs; ++x)
+	{
+		timePreKernel = t.now();
+		runOMP(Boards, Queens);
+		timePostKernel = t.now();
+		tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
+		resultsFile << tTime << ",";
+	}
+	resultsFile << "\r\n";
+	resultsFile.close();
 }

@@ -75,7 +75,7 @@ void calculateAllSolutions(int N, bool print)
     std::vector<std::vector<int>> solutions;
     std::vector<int> gameBoard(N, 0);
     calculateSolutionsRecursive(0, gameBoard, N, solutions);
-    printf("N=%d, solutions=%d\n", N, int(solutions.size()));
+    //printf("N=%d, solutions=%d\n", N, int(solutions.size()));
     
     if (print)
     {
@@ -96,10 +96,45 @@ void calculateAllSolutions(int N, bool print)
     }
 }
 
+void serialSolutionsPrintToFile(int Queens, int Runs)
+{
+    std::ofstream resultsFile;
+    std::string file = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/CW2_Testing/Serial/";
+    std::string fileName = "Results";
+    fileName.append(std::to_string(Queens));
+    fileName.append("-Runs");
+    fileName.append(std::to_string(Runs));
+    fileName.append(".csv");
+    file.append(fileName);
+    resultsFile.open(file);
+    resultsFile << "--Serial Results-- | Queen Count =" << Queens << std::endl;
+
+    std::chrono::high_resolution_clock t;
+    std::chrono::steady_clock::time_point timePreKernel;
+    std::chrono::steady_clock::time_point timePostKernel;
+    long long tTime;
+
+    for (int i{ 0 }; i < Runs; ++i)
+    {
+        timePreKernel = t.now();
+        calculateAllSolutions(Queens, false);
+        timePostKernel = t.now();
+        tTime = std::chrono::duration_cast<std::chrono::milliseconds>(timePostKernel - timePreKernel).count();
+        resultsFile << tTime << ",";
+    }
+    resultsFile << "\r\n";
+    resultsFile.close();
+}
+
 
 int main(int argc, char** argv)
 {
-    nqueen_solver::Run(8);
-    /*for (int N = 4; N < 13; ++N)
-        calculateAllSolutions(N, false);*/
+    for (int x{ 4 }; x < 11; ++x)
+    {
+        nqueen_solver::Run(x, 5);
+    }
+    for (int N{ 4 }; N < 11; ++N)
+    {
+        serialSolutionsPrintToFile(N, 5);
+    }
 }

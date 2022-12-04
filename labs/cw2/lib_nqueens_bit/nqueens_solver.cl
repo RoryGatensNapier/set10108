@@ -25,15 +25,11 @@ __kernel void solveBoard(__global int *BoardData, __global int *Validity, __glob
 		int isnEq_L = isnotequal(rowValue, boardtestLeft);
 		int isnEq_R = isnotequal(rowValue, boardtestRight);
 		int isnEq = isnEq_L & isnEq_R;
-		//printf("isnEq_L = %d / isnEq_R = %d / isnEq = %d\r\n", isnEq_L, isnEq_R, isnEq);
 		totalTests += isnEq;
 	}
 	atomic_fetch_add(&wgTests, totalTests);
-	//printf("totalTests = %d\r\n", totalTests);
 	if (WG_idx == 0)
 	{
 		Validity[board_ID] = atomic_load(&wgTests);
 	}
-	//printf("Workset idx: %d, Workgroup idx: %d / BoardData: %d, Board: %d\n", WS_idx, WG_idx, BoardData[WS_idx], Board[WG_idx]);
-	//printf("Worker ID/Raw input ID idx: %d, Workgroup idx: %d / Board ID: %d / BoardData: %d, Board: %d %d %d %d %d %d %d %d\n", WS_idx, WG_idx, board_ID, BoardData[WS_idx], Board[0], Board[1], Board[2], Board[3], Board[4], Board[5], Board[6], Board[7]);
 }
