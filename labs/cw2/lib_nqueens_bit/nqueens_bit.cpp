@@ -153,7 +153,7 @@ void nqueen_solver::Run(int Queens, int Runs)
 	std::ofstream resultsFile;
 
 	std::string file = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/CW2_Testing/Parallel/";
-	std::string fileName = "Results-Queens";
+	std::string fileName = "Parallel-Queens";
 	fileName.append(std::to_string(Queens));
 	fileName.append("-Runs");
 	fileName.append(std::to_string(Runs));

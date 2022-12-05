@@ -100,7 +100,7 @@ void serialSolutionsPrintToFile(int Queens, int Runs)
 {
     std::ofstream resultsFile;
     std::string file = "G:/NapierWork/4th Year/Concurrent and Parallel Systems/CW2_Testing/Serial/";
-    std::string fileName = "Results";
+    std::string fileName = "Serial-Queens";
     fileName.append(std::to_string(Queens));
     fileName.append("-Runs");
     fileName.append(std::to_string(Runs));
@@ -129,12 +129,15 @@ void serialSolutionsPrintToFile(int Queens, int Runs)
 
 int main(int argc, char** argv)
 {
+    int iterations{ 0 };
+    std::cout << "Please enter the number of iterations you would like to perform: ";
+    std::cin >> iterations;
     for (int x{ 4 }; x < 11; ++x)
     {
-        nqueen_solver::Run(x, 5);
+        nqueen_solver::Run(x, iterations);
     }
     for (int N{ 4 }; N < 11; ++N)
     {
-        serialSolutionsPrintToFile(N, 5);
+        serialSolutionsPrintToFile(N, iterations);
     }
 }
